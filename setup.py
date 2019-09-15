@@ -58,6 +58,14 @@ ext_modules = {
 
 setup(
     name='glcontext',
-    version='0.2.0',
+    version='0.2.1',
+    description='Portable OpenGL Context',
+    long_description='Various OpenGL Context backends to support ModernGL on most platforms',
+    long_description_content_type='text/markdown',
+    url='https://github.com/moderngl/glcontext',
+    author='Szabolcs Dombi',
+    author_email='cprogrammer1994@gmail.com',
+    license='MIT',
+    platforms=['any'],
     ext_modules=ext_modules[target],
 )
