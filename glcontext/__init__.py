@@ -1,3 +1,6 @@
+__version__ = '0.2.0'
+
+
 def default_backend(standalone=False):
     PLATFORMS = {'windows', 'linux', 'darwin'}
 
