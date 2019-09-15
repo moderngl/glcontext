@@ -47,7 +47,7 @@ darwin = Extension(
     name='glcontext.darwin',
     sources=['glcontext/darwin.cpp'],
     extra_compile_args=['-fpermissive', '-Wno-deprecated-declarations'],
-    extra_linker_args=['-framework', 'OpenGL', '-Wno-deprecated'],
+    extra_link_args=['-framework', 'OpenGL', '-Wno-deprecated'],
 )
 
 ext_modules = {
