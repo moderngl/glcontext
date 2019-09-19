@@ -27,4 +27,4 @@ def default_backend(standalone=False):
     if target == 'darwin':
         from glcontext import darwin
         mode = 'standalone' if standalone else 'detect'
-        return lambda glversion: wgl.create_context(mode=mode, glversion=glversion)
+        return lambda glversion: wgl.create_context(mode=mode)
