@@ -54,6 +54,7 @@ struct GLContext {
     GLXContext ctx;
 
     bool standalone;
+    bool own_window;
 
     m_glXChooseFBConfigProc m_glXChooseFBConfig;
     m_glXChooseVisualProc m_glXChooseVisual;
@@ -210,6 +211,7 @@ GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwa
 
     if (!strcmp(mode, "detect")) {
         res->standalone = false;
+        res->own_window = false;
 
         res->ctx = res->m_glXGetCurrentContext();
         if (!res->ctx) {
@@ -232,8 +234,68 @@ GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwa
         return res;
     }
 
+    if (!strcmp(mode, "share")) {
+        res->standalone = true;
+        res->own_window = false;
+
+        GLXContext ctx_share = res->m_glXGetCurrentContext();
+        if (!ctx_share) {
+            PyErr_Format(PyExc_Exception, "cannot detect OpenGL context");
+            return NULL;
+        }
+
+        res->wnd = res->m_glXGetCurrentDrawable();
+        if (!res->wnd) {
+            PyErr_Format(PyExc_Exception, "glXGetCurrentDrawable failed");
+            return NULL;
+        }
+
+        res->dpy = res->m_glXGetCurrentDisplay();
+        if (!res->dpy) {
+            PyErr_Format(PyExc_Exception, "glXGetCurrentDisplay failed");
+            return NULL;
+        }
+
+        res->m_XSetErrorHandler(SilentXErrorHandler);
+
+        if (glversion) {
+            void (* proc)() = res->m_glXGetProcAddress((const unsigned char *)"glXCreateContextAttribsARB");
+            res->m_glXCreateContextAttribsARB = (m_glXCreateContextAttribsARBProc)proc;
+            if (!res->m_glXCreateContextAttribsARB) {
+                PyErr_Format(PyExc_Exception, "glXCreateContextAttribsARB not found");
+                return NULL;
+            }
+
+            int attribs[] = {
+                GLX_CONTEXT_PROFILE_MASK, GLX_CONTEXT_CORE_PROFILE_BIT,
+                GLX_CONTEXT_MAJOR_VERSION, glversion / 100 % 10,
+                GLX_CONTEXT_MINOR_VERSION, glversion / 10 % 10,
+                0, 0,
+            };
+
+            res->ctx = res->m_glXCreateContextAttribsARB(res->dpy, *fbc, ctx_share, true, attribs);
+        } else {
+            res->ctx = res->m_glXCreateContext(res->dpy, vi, ctx_share, true);
+        }
+
+        if (!res->ctx) {
+            PyErr_Format(PyExc_Exception, "cannot create context");
+            return NULL;
+        }
+
+        res->m_XSetErrorHandler(NULL);
+
+        if (!res->m_glXMakeCurrent(res->dpy, res->wnd, res->ctx)) {
+            PyErr_Format(PyExc_Exception, "glXMakeCurrent failed");
+            return NULL;
+        }
+
+        return res;
+    }
+
     if (!strcmp(mode, "standalone")) {
         res->standalone = true;
+        res->own_window = true;
 
         res->dpy = res->m_XOpenDisplay(NULL);
 
@@ -353,6 +415,8 @@ PyObject * GLContext_meth_release(GLContext * self) {
     if (self->standalone) {
         self->m_glXMakeCurrent(self->dpy, None, NULL);
         self->m_glXDestroyContext(self->dpy, self->ctx);
+    }
+    if (self->own_window) {
         self->m_XDestroyWindow(self->dpy, self->wnd);
         self->m_XCloseDisplay(self->dpy);
     }
