@@ -5,8 +5,6 @@
 
 **glcontext** is a library providing OpenGL implementation for ModernGL on multiple platforms.
 
----
-
 ## Backends
 
 A glcontext backend is either an extension or a submodule of the glcontext package.
