@@ -256,6 +256,33 @@ GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwa
             return NULL;
         }
 
+        int nelements = 0;
+        GLXFBConfig * fbc = res->m_glXChooseFBConfig(res->dpy, res->m_XDefaultScreen(res->dpy), 0, &nelements);
+
+        if (!fbc) {
+            res->m_XCloseDisplay(res->dpy);
+            PyErr_Format(PyExc_Exception, "glXChooseFBConfig failed");
+            return NULL;
+        }
+
+        static int attribute_list[] = {
+            GLX_RGBA,
+            GLX_DOUBLEBUFFER,
+            GLX_RED_SIZE, 8,
+            GLX_GREEN_SIZE, 8,
+            GLX_BLUE_SIZE, 8,
+            GLX_DEPTH_SIZE, 24,
+            None,
+        };
+
+        XVisualInfo * vi = res->m_glXChooseVisual(res->dpy, res->m_XDefaultScreen(res->dpy), attribute_list);
+
+        if (!vi) {
+            res->m_XCloseDisplay(res->dpy);
+            PyErr_Format(PyExc_Exception, "cannot choose visual");
+            return NULL;
+        }
+
         res->m_XSetErrorHandler(SilentXErrorHandler);
 
         if (glversion) {
