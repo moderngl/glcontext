@@ -22,9 +22,9 @@ def default_backend(standalone=False):
     if target == 'linux':
         from glcontext import x11
         mode = 'standalone' if standalone else 'detect'
-        return lambda glversion: wgl.create_context(mode=mode, glversion=glversion)
+        return lambda glversion: x11.create_context(mode=mode, glversion=glversion)
 
     if target == 'darwin':
         from glcontext import darwin
         mode = 'standalone' if standalone else 'detect'
-        return lambda glversion: wgl.create_context(mode=mode)
+        return lambda glversion: darwin.create_context(mode=mode)
