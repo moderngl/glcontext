@@ -69,4 +69,14 @@ setup(
     platforms=['any'],
     packages=['glcontext'],
     ext_modules=ext_modules[target],
+    classifiers=[
+        'Development Status :: 5 - Production/Stable',
+        'License :: OSI Approved :: MIT License',
+        'Operating System :: OS Independent',
+        'Topic :: Games/Entertainment',
+        'Topic :: Multimedia :: Graphics',
+        'Topic :: Multimedia :: Graphics :: 3D Rendering',
+        'Topic :: Scientific/Engineering :: Visualization',
+        'Programming Language :: Python :: 3 :: Only',
+    ],
 )
