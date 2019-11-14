@@ -60,7 +60,7 @@ setup(
     name='glcontext',
     version='1.0.0',
     description='Portable OpenGL Context',
-    long_description='Various OpenGL Context backends to support ModernGL on most platforms',
+    long_description=open('README.md').read(),
     long_description_content_type='text/markdown',
     url='https://github.com/moderngl/glcontext',
     author='Szabolcs Dombi',
