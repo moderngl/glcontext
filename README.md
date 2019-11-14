@@ -1,9 +1,14 @@
+[![pypi](https://badge.fury.io/py/glcontext.svg)](https://pypi.python.org/pypi/glcontext)
 
 <img align="right" src="https://github.com/moderngl/glcontext/raw/master/.github/icon_small.png">
 
 # glcontext
 
 **glcontext** is a library providing OpenGL implementation for ModernGL on multiple platforms.
+
+* [glcontext on github](https://github.com/moderngl/glcontext)
+* [glcontext on pypi](https://pypi.org/project/glcontext)
+* [ModernGL](https://github.com/moderngl/moderngl)
 
 ## Backends
 
