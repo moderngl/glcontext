@@ -86,6 +86,7 @@ GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwa
             PyErr_Format(PyExc_Exception, "cannot create OpenGL context");
             return NULL;
         }
+        res->ctx = cgl_context;
 
         CGLSetCurrentContext(cgl_context);
         return res;
