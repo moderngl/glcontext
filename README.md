@@ -81,6 +81,13 @@ Example for platform specific dependencies:
 
 Please note that `libGL.so` is loaded dinamically by the backends.
 
+## Running tests
+
+```
+pip install -r tests/requirements.txt
+pytest tests
+```
+
 ## Contributing
 
 Contribution is welcome.

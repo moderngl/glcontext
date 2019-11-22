@@ -1,4 +1,6 @@
+import os
 from unittest import TestCase
+import psutil
 import glcontext
 
 
@@ -31,8 +33,19 @@ class ContextTestCase(TestCase):
         self.assertEqual(ptr, 0)
 
     def test_mass_create(self):
-        """Create and destroy a large quantity of contexts"""
+        """Create and destroy a large quantity of contexts.
+        The rss memory usage should not grow more than 5x
+        after allocating 1000 contexts.
+        """
+        process = psutil.Process(os.getpid())
+        start_rss = process.memory_info().rss
+
         for i in range(1000):
-            backend = glcontext.default_backend(standalone=True)
-            ctx = backend(330)
+            ctx = glcontext.default_backend(standalone=True)(300)
+            # Ensure we can enter context and load a method as a minimum
+            with ctx:
+                self.assertGreater(ctx.load('glBegin'), 0)
             ctx.release()
+
+        end_rss = process.memory_info().rss
+        self.assertTrue(end_rss / start_rss < 5.0)
