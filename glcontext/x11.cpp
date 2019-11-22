@@ -87,7 +87,7 @@ GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwa
     const char * libx11 = "libX11.so";
     int glversion = 330;
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "|ssi", keywords, &mode, &libgl, &libx11, &glversion)) {
+    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "|sssi", keywords, &mode, &libgl, &libx11, &glversion)) {
         return NULL;
     }
 
@@ -95,7 +95,7 @@ GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwa
 
     res->libgl = dlopen(libgl, RTLD_LAZY);
     if (!res->libgl) {
-        PyErr_Format(PyExc_Exception, "%s not loaded", libgl);
+        PyErr_Format(PyExc_Exception, "%s not found in /lib, /usr/lib or LD_LIBRARY_PATH", libgl);
         return NULL;
     }
 
