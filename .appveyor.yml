@@ -8,7 +8,7 @@ environment:
     - PYTHON: "C:\\Python37-x64"
 
 install:
-  - "SET PATH=%C:\\Python37-x64%;%C:\\Python37-x64%\\Scripts;%PATH%"
+  - "SET PATH=%PYTHON%;%PYTHON%\\Scripts;%PATH%"  
   - "python -m pip install pip wheel setuptools pytest -U"
   - "python setup.py develop"
 
