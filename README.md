@@ -81,6 +81,49 @@ Example for platform specific dependencies:
 
 Please note that `libGL.so` is loaded dinamically by the backends.
 
+## Current backends
+
+Each backend supports a `glversion` and `mode` parameters as a minimum.
+The `glversion` is the minimum OpenGL version required while `mode`
+decides how the context is created.
+
+Modes
+
+* `detect`: Will detect an existing active OpenGL context.
+* `standalone`: Crates a headless OpenGL context
+* `share`: Creates a new context sharing objects with the currently active context.
+
+### wgl
+
+Parameters
+
+* `glversion` (`int`): The minimum OpenGL version for the context
+* `mode` (`str`): Creation mode. `detect` | `standalone` | `share`
+* `libgl` (`str`): Name of gl library to load (default: `opengl32.dll`)
+
+### x11
+
+* `glversion` (`int`): The minimum OpenGL version for the context
+* `mode` (`str`): Creation mode. `detect` | `standalone` | `share`
+* `libgl` (`str`): Name of gl library to load (default: `libGL.so`)
+* `libx11` (`str`): Name of x11 library to load (default: `libX11.so`)
+
+### darwin
+
+Will create the the highest core context available.
+`share` mode is currently not available.
+
+* `mode` (`str`): Creation mode. `detect` | `standalone`
+
+### egl
+
+Only supports standalone mode.
+
+* `glversion` (`int`): The minimum OpenGL version for the context
+* `mode` (`str`): Creation mode. `standalone`
+* `libgl` (`str`): Name of gl library to load (default: `libGL.so`)
+* `libegl` (`str`): Name of gl library to load (default: `libEGL.so`)
+
 ## Running tests
 
 ```
