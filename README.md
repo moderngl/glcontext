@@ -103,6 +103,8 @@ Parameters
 
 ### x11
 
+Parameters
+
 * `glversion` (`int`): The minimum OpenGL version for the context
 * `mode` (`str`): Creation mode. `detect` | `standalone` | `share`
 * `libgl` (`str`): Name of gl library to load (default: `libGL.so`)
@@ -111,13 +113,17 @@ Parameters
 ### darwin
 
 Will create the the highest core context available.
-`share` mode is currently not available.
 
+Parameters
+
+* `share` mode is currently not available.
 * `mode` (`str`): Creation mode. `detect` | `standalone`
 
 ### egl
 
 Only supports standalone mode.
+
+Parameters
 
 * `glversion` (`int`): The minimum OpenGL version for the context
 * `mode` (`str`): Creation mode. `standalone`
