@@ -55,6 +55,9 @@ struct GLContext {
 
     bool standalone;
     bool own_window;
+    void * old_context;
+    void * old_display;
+    void * old_window;
 
     m_glXChooseFBConfigProc m_glXChooseFBConfig;
     m_glXChooseVisualProc m_glXChooseVisual;
@@ -429,12 +432,15 @@ PyObject * GLContext_meth_load(GLContext * self, PyObject * arg) {
 }
 
 PyObject * GLContext_meth_enter(GLContext * self) {
+    self->old_display = (void *)self->m_glXGetCurrentDisplay();
+    self->old_window = (void *)self->m_glXGetCurrentDrawable();
+    self->old_context = (void *)self->m_glXGetCurrentContext();
     self->m_glXMakeCurrent(self->dpy, self->wnd, self->ctx);
     Py_RETURN_NONE;
 }
 
 PyObject * GLContext_meth_exit(GLContext * self) {
-    self->m_glXMakeCurrent(self->dpy, None, NULL);
+    self->m_glXMakeCurrent((Display *)self->old_display, (Window)self->old_window, (GLXContext)self->old_context);    
     Py_RETURN_NONE;
 }
 
