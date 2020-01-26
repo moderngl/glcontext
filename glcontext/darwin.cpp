@@ -14,6 +14,7 @@ struct GLContext {
     PyObject_HEAD
     CGLContextObj ctx;
     int standalone;
+    void * old_context;
 };
 
 PyTypeObject * GLContext_type;
@@ -110,12 +111,13 @@ PyObject * GLContext_meth_load(GLContext * self, PyObject * arg) {
 }
 
 PyObject * GLContext_meth_enter(GLContext * self) {
+    self->old_context = (void *)CGLGetCurrentContext();
     CGLSetCurrentContext(self->ctx);
     Py_RETURN_NONE;
 }
 
 PyObject * GLContext_meth_exit(GLContext * self) {
-    CGLSetCurrentContext(NULL);
+    CGLSetCurrentContext((CGLContextObj)self->old_context);
     Py_RETURN_NONE;
 }
 
