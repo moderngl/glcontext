@@ -65,7 +65,7 @@ def _x11():
     def create(*args, **kwargs):
         supported_args = ['glversion', 'mode', 'libgl', 'libx11']
         return x11.create_context(**_strip_kwargs(kwargs, supported_args))
-
+    return create
 
 def _darwin():
     """Create darwin/cgl context"""
@@ -73,7 +73,7 @@ def _darwin():
     def create(*args, **kwargs):
         supported_args = ['mode']
         return darwin.create_context(**_strip_kwargs(kwargs, supported_args))
-
+    return create
 
 def _egl():
     from glcontext import egl
