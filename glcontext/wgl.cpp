@@ -27,6 +27,8 @@ struct GLContext {
     HGLRC hrc;
 
     bool standalone;
+    void * old_context;
+    void * old_display;
 
     m_wglGetCurrentContextProc m_wglGetCurrentContext;
     m_wglGetCurrentDCProc m_wglGetCurrentDC;
@@ -253,12 +255,14 @@ PyObject * GLContext_meth_load(GLContext * self, PyObject * arg) {
 }
 
 PyObject * GLContext_meth_enter(GLContext * self) {
+    self->old_context = (void *)self->m_wglGetCurrentContext();
+    self->old_display = (void *)self->m_wglGetCurrentDC();
     self->m_wglMakeCurrent(self->hdc, self->hrc);
     Py_RETURN_NONE;
 }
 
 PyObject * GLContext_meth_exit(GLContext * self) {
-    self->m_wglMakeCurrent(NULL, NULL);
+    self->m_wglMakeCurrent((HDC)self->old_display, (HGLRC)self->old_context);
     Py_RETURN_NONE;
 }
 
