@@ -38,14 +38,15 @@ def default_backend():
     if target == 'darwin':
         return _darwin()
 
+    raise ValueError("Cannot find suitable default backend")
 
-def backend(name: str):
+
+def get_backend_by_name(name: str):
     """Request a specific backend by name"""
-
     if name == 'egl':
         return _egl()
 
-    raise ValueError("Not supported backed ")
+    raise ValueError("Cannot find supported backend: '{}'".format(name))
 
 
 def _wgl():
