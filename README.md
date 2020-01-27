@@ -91,7 +91,7 @@ Modes
 
 * `detect`: Will detect an existing active OpenGL context.
 * `standalone`: Crates a headless OpenGL context
-* `share`: Creates a new context sharing objects with the currently active context.
+* `share`: Creates a new context sharing objects with the currently active context (headless)
 
 ### wgl
 
@@ -116,7 +116,6 @@ Will create the the highest core context available.
 
 Parameters
 
-* `share` mode is currently not available.
 * `mode` (`str`): Creation mode. `detect` | `standalone`
 
 ### egl
