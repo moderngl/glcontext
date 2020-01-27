@@ -6,7 +6,8 @@ env:
   - CIBW_BUILD=cp3?-*
   - CIBW_MANYLINUX_X86_64_IMAGE=manylinux1
   - CIBW_MANYLINUX_I686_IMAGE=manylinux1
-  - TWINE_USERNAME=__token__  
+  - TWINE_USERNAME=__token__
+  # Note: TWINE_PASSWORD is set to an API token in Travis settings
 jobs:
   include:
   - services: docker
@@ -19,7 +20,7 @@ jobs:
     - choco install python --version 3.8.0
     - export PATH="/c/Python38:/c/Python/Scripts:$PATH"
 install:
-  - python -m pip install twine cibuildwheel==1.1.0
+  - python -m pip install -U setuptools wheel twine cibuildwheel==1.1.0
 script:
   - python -m cibuildwheel --output-dir ./wheelhouse
   - ls wheelhouse
