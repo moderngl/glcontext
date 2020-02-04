@@ -159,55 +159,55 @@ GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwa
     if (strcmp(mode, "detect")) {
         res->libx11 = dlopen(libx11, RTLD_LAZY);
         if (!res->libx11) {
-            PyErr_Format(PyExc_Exception, "%s not loaded", libx11);
+            PyErr_Format(PyExc_Exception, "(detect) %s not loaded", libx11);
             return NULL;
         }
 
         res->m_XOpenDisplay = (m_XOpenDisplayProc)dlsym(res->libx11, "XOpenDisplay");
         if (!res->m_XOpenDisplay) {
-            PyErr_Format(PyExc_Exception, "XOpenDisplay not found");
+            PyErr_Format(PyExc_Exception, "(detect) XOpenDisplay not found");
             return NULL;
         }
 
         res->m_XDefaultScreen = (m_XDefaultScreenProc)dlsym(res->libx11, "XDefaultScreen");
         if (!res->m_XDefaultScreen) {
-            PyErr_Format(PyExc_Exception, "XDefaultScreen not found");
+            PyErr_Format(PyExc_Exception, "(detect) XDefaultScreen not found");
             return NULL;
         }
 
         res->m_XRootWindow = (m_XRootWindowProc)dlsym(res->libx11, "XRootWindow");
         if (!res->m_XRootWindow) {
-            PyErr_Format(PyExc_Exception, "XRootWindow not found");
+            PyErr_Format(PyExc_Exception, "(detect) XRootWindow not found");
             return NULL;
         }
 
         res->m_XCreateColormap = (m_XCreateColormapProc)dlsym(res->libx11, "XCreateColormap");
         if (!res->m_XCreateColormap) {
-            PyErr_Format(PyExc_Exception, "XCreateColormap not found");
+            PyErr_Format(PyExc_Exception, "(detect) XCreateColormap not found");
             return NULL;
         }
 
         res->m_XCreateWindow = (m_XCreateWindowProc)dlsym(res->libx11, "XCreateWindow");
         if (!res->m_XCreateWindow) {
-            PyErr_Format(PyExc_Exception, "XCreateWindow not found");
+            PyErr_Format(PyExc_Exception, "(detect) XCreateWindow not found");
             return NULL;
         }
 
         res->m_XDestroyWindow = (m_XDestroyWindowProc)dlsym(res->libx11, "XDestroyWindow");
         if (!res->m_XDestroyWindow) {
-            PyErr_Format(PyExc_Exception, "XDestroyWindow not found");
+            PyErr_Format(PyExc_Exception, "(detect) XDestroyWindow not found");
             return NULL;
         }
 
         res->m_XCloseDisplay = (m_XCloseDisplayProc)dlsym(res->libx11, "XCloseDisplay");
         if (!res->m_XCloseDisplay) {
-            PyErr_Format(PyExc_Exception, "XCloseDisplay not found");
+            PyErr_Format(PyExc_Exception, "(detect) XCloseDisplay not found");
             return NULL;
         }
 
         res->m_XSetErrorHandler = (m_XSetErrorHandlerProc)dlsym(res->libx11, "XSetErrorHandler");
         if (!res->m_XSetErrorHandler) {
-            PyErr_Format(PyExc_Exception, "XSetErrorHandler not found");
+            PyErr_Format(PyExc_Exception, "(detect) XSetErrorHandler not found");
             return NULL;
         }
     }
@@ -218,19 +218,19 @@ GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwa
 
         res->ctx = res->m_glXGetCurrentContext();
         if (!res->ctx) {
-            PyErr_Format(PyExc_Exception, "cannot detect OpenGL context");
+            PyErr_Format(PyExc_Exception, "(detect) glXGetCurrentContext: cannot detect OpenGL context");
             return NULL;
         }
 
         res->wnd = res->m_glXGetCurrentDrawable();
         if (!res->wnd) {
-            PyErr_Format(PyExc_Exception, "glXGetCurrentDrawable failed");
+            PyErr_Format(PyExc_Exception, "(detect) glXGetCurrentDrawable failed");
             return NULL;
         }
 
         res->dpy = res->m_glXGetCurrentDisplay();
         if (!res->dpy) {
-            PyErr_Format(PyExc_Exception, "glXGetCurrentDisplay failed");
+            PyErr_Format(PyExc_Exception, "(detect) glXGetCurrentDisplay failed");
             return NULL;
         }
 
@@ -243,19 +243,19 @@ GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwa
 
         GLXContext ctx_share = res->m_glXGetCurrentContext();
         if (!ctx_share) {
-            PyErr_Format(PyExc_Exception, "cannot detect OpenGL context");
+            PyErr_Format(PyExc_Exception, "(share) glXGetCurrentContext: cannot detect OpenGL context");
             return NULL;
         }
 
         res->wnd = res->m_glXGetCurrentDrawable();
         if (!res->wnd) {
-            PyErr_Format(PyExc_Exception, "glXGetCurrentDrawable failed");
+            PyErr_Format(PyExc_Exception, "(share) glXGetCurrentDrawable failed");
             return NULL;
         }
 
         res->dpy = res->m_glXGetCurrentDisplay();
         if (!res->dpy) {
-            PyErr_Format(PyExc_Exception, "glXGetCurrentDisplay failed");
+            PyErr_Format(PyExc_Exception, "(share) glXGetCurrentDisplay failed");
             return NULL;
         }
 
@@ -264,7 +264,7 @@ GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwa
 
         if (!fbc) {
             res->m_XCloseDisplay(res->dpy);
-            PyErr_Format(PyExc_Exception, "glXChooseFBConfig failed");
+            PyErr_Format(PyExc_Exception, "(share) glXChooseFBConfig failed");
             return NULL;
         }
 
@@ -282,7 +282,7 @@ GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwa
 
         if (!vi) {
             res->m_XCloseDisplay(res->dpy);
-            PyErr_Format(PyExc_Exception, "cannot choose visual");
+            PyErr_Format(PyExc_Exception, "(share) glXChooseVisual:  cannot choose visual");
             return NULL;
         }
 
@@ -292,7 +292,7 @@ GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwa
             void (* proc)() = res->m_glXGetProcAddress((const unsigned char *)"glXCreateContextAttribsARB");
             res->m_glXCreateContextAttribsARB = (m_glXCreateContextAttribsARBProc)proc;
             if (!res->m_glXCreateContextAttribsARB) {
-                PyErr_Format(PyExc_Exception, "glXCreateContextAttribsARB not found");
+                PyErr_Format(PyExc_Exception, "(share) glXCreateContextAttribsARB not found");
                 return NULL;
             }
 
@@ -309,14 +309,14 @@ GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwa
         }
 
         if (!res->ctx) {
-            PyErr_Format(PyExc_Exception, "cannot create context");
+            PyErr_Format(PyExc_Exception, "(share) cannot create context");
             return NULL;
         }
 
         res->m_XSetErrorHandler(NULL);
 
         if (!res->m_glXMakeCurrent(res->dpy, res->wnd, res->ctx)) {
-            PyErr_Format(PyExc_Exception, "glXMakeCurrent failed");
+            PyErr_Format(PyExc_Exception, "(share) glXMakeCurrent failed");
             return NULL;
         }
 
@@ -334,7 +334,7 @@ GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwa
         }
 
         if (!res->dpy) {
-            PyErr_Format(PyExc_Exception, "cannot open display");
+            PyErr_Format(PyExc_Exception, "(standalone) XOpenDisplay: cannot open display");
             return NULL;
         }
 
@@ -343,7 +343,7 @@ GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwa
 
         if (!fbc) {
             res->m_XCloseDisplay(res->dpy);
-            PyErr_Format(PyExc_Exception, "glXChooseFBConfig failed");
+            PyErr_Format(PyExc_Exception, "(standalone) glXChooseFBConfig failed");
             return NULL;
         }
 
@@ -361,7 +361,7 @@ GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwa
 
         if (!vi) {
             res->m_XCloseDisplay(res->dpy);
-            PyErr_Format(PyExc_Exception, "cannot choose visual");
+            PyErr_Format(PyExc_Exception, "(standalone) glXChooseVisual: cannot choose visual");
             return NULL;
         }
 
@@ -377,7 +377,7 @@ GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwa
 
         if (!res->wnd) {
             res->m_XCloseDisplay(res->dpy);
-            PyErr_Format(PyExc_Exception, "cannot create window");
+            PyErr_Format(PyExc_Exception, "(standalone) XCreateWindow: cannot create window");
             return NULL;
         }
 
@@ -387,7 +387,7 @@ GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwa
             void (* proc)() = res->m_glXGetProcAddress((const unsigned char *)"glXCreateContextAttribsARB");
             res->m_glXCreateContextAttribsARB = (m_glXCreateContextAttribsARBProc)proc;
             if (!res->m_glXCreateContextAttribsARB) {
-                PyErr_Format(PyExc_Exception, "glXCreateContextAttribsARB not found");
+                PyErr_Format(PyExc_Exception, "(standalone) glXCreateContextAttribsARB not found");
                 return NULL;
             }
 
@@ -404,14 +404,14 @@ GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwa
         }
 
         if (!res->ctx) {
-            PyErr_Format(PyExc_Exception, "cannot create context");
+            PyErr_Format(PyExc_Exception, "(standalone) cannot create context");
             return NULL;
         }
 
         res->m_XSetErrorHandler(NULL);
 
         if (!res->m_glXMakeCurrent(res->dpy, res->wnd, res->ctx)) {
-            PyErr_Format(PyExc_Exception, "glXMakeCurrent failed");
+            PyErr_Format(PyExc_Exception, "(standalone) glXMakeCurrent failed");
             return NULL;
         }
 
