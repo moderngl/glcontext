@@ -9,8 +9,8 @@ class ContextTestCase(TestCase):
     def test_create(self):
         """Basic context testing"""
         # Create a standalone context
-        backend = glcontext.default_backend(standalone=True)
-        ctx = backend(330)
+        backend = glcontext.default_backend()
+        ctx = backend(mode='standalone', glversion=330)
 
         # Ensure methods are present
         self.assertTrue(callable(ctx.load))
@@ -43,7 +43,7 @@ class ContextTestCase(TestCase):
         start_rss = process.memory_info().rss
 
         for i in range(1000):
-            ctx = glcontext.default_backend(standalone=True)(300)
+            ctx = glcontext.default_backend()(mode='standalone', glversion=330)
             # Ensure we can enter context and load a method as a minimum
             with ctx:
                 self.assertGreater(ctx.load('glBegin'), 0)
