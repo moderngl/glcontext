@@ -1,6 +1,16 @@
 
 # Change Log
 
+## 2.0.1
+
+* Support setting backend arguments using environment variables.
+  * `GLCONTEXT_GLVERSION` for setting opengl version
+  * `GLCONTEXT_LINUX_LIBGL` for specifying libgl name
+  * `GLCONTEXT_LINUX_LIBX11` for specifying libx11 name
+  * `GLCONTEXT_LINUX_LIBEGL` for specifying libegl name
+  * `GLCONTEXT_WIN_LIBGL` for specifying dll name
+* x11: More details in error messages
+
 ## 2.0.0
 
 Support passing in values to backends for more detailed

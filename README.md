@@ -129,6 +129,24 @@ Parameters
 * `libgl` (`str`): Name of gl library to load (default: `libGL.so`)
 * `libegl` (`str`): Name of gl library to load (default: `libEGL.so`)
 
+## Environment Variables
+
+Environment variables can be set to configure backends.
+These will get first priority if defined.
+
+```bash
+# Override OpenGL version code. For example: 410 (for opengl 4.1)
+GLCONTEXT_GLVERSION
+# Override libgl on linux. For example: libGL.1.so
+GLCONTEXT_LINUX_LIBGL
+# Override libx11 on linux. For exampleØ libX11.x.so
+GLCONTEXT_LINUX_LIBX11
+# Override libegl on linux. For exampleØ libEGL.x.so
+GLCONTEXT_LINUX_LIBEGL
+# Override gl dll on windows. For example: opengl32_custom.dll
+GLCONTEXT_WIN_LIBGL
+```
+
 ## Running tests
 
 ```

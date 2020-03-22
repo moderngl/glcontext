@@ -1,4 +1,6 @@
-__version__ = '2.0.0'
+import os
+
+__version__ = '2.1.0'
 
 
 def default_backend():
@@ -54,8 +56,10 @@ def _wgl():
     from glcontext import wgl
 
     def create(*args, **kwargs):
-        supported_args = ['glversion', 'mode', 'libgl']
-        return wgl.create_context(**_strip_kwargs(kwargs, supported_args))
+        _apply_env_var(kwargs, 'glversion', 'GLCONTEXT_GLVERSION', arg_type=int)
+        _apply_env_var(kwargs, 'libgl', 'GLCONTEXT_WIN_LIBGL')
+        kwargs = _strip_kwargs(kwargs, ['glversion', 'mode', 'libgl'])
+        return wgl.create_context(**kwargs)
 
     return create
 
@@ -63,24 +67,37 @@ def _wgl():
 def _x11():
     """Create x11 backend"""
     from glcontext import x11
+
     def create(*args, **kwargs):
-        supported_args = ['glversion', 'mode', 'libgl', 'libx11']
-        return x11.create_context(**_strip_kwargs(kwargs, supported_args))
+        _apply_env_var(kwargs, 'glversion', 'GLCONTEXT_GLVERSION', arg_type=int)
+        _apply_env_var(kwargs, 'libgl', 'GLCONTEXT_LINUX_LIBGL')
+        _apply_env_var(kwargs, 'libx11', 'GLCONTEXT_LINUX_LIBX11')
+        kwargs = _strip_kwargs(kwargs, ['glversion', 'mode', 'libgl', 'libx11'])
+        return x11.create_context(**kwargs)
+
     return create
+
 
 def _darwin():
     """Create darwin/cgl context"""
     from glcontext import darwin
+
     def create(*args, **kwargs):
-        supported_args = ['mode']
-        return darwin.create_context(**_strip_kwargs(kwargs, supported_args))
+        return darwin.create_context(**_strip_kwargs(kwargs, ['mode']))
+
     return create
+
 
 def _egl():
     from glcontext import egl
+
     def create(*args, **kwargs):
-        supported_args = ['glversion', 'mode', 'libgl', 'libegl']
-        return egl.create_context(**_strip_kwargs(kwargs, supported_args))
+        _apply_env_var(kwargs, 'glversion', 'GLCONTEXT_GLVERSION', arg_type=int)
+        _apply_env_var(kwargs, 'libgl', 'GLCONTEXT_LINUX_LIBGL')
+        _apply_env_var(kwargs, 'libegl', 'GLCONTEXT_LINUX_LIBEGL')
+        kwargs = _strip_kwargs(kwargs, ['glversion', 'mode', 'libgl', 'libegl'])
+        return egl.create_context(**kwargs)
+
     return create
 
 
@@ -95,3 +112,10 @@ def _strip_kwargs(kwargs: dict, supported_args: list):
         - Removes unsupported arguments
     """
     return {k: v for k, v in kwargs.items() if v is not None and k in supported_args}
+
+
+def _apply_env_var(kwargs, arg_name, env_name, arg_type=str):
+    """Injects an environment variable into the arg dict if present"""
+    value = os.environ.get(env_name, kwargs.get(arg_name))
+    if value:
+        kwargs[arg_name] = arg_type(value)
