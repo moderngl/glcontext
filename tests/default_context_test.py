@@ -9,6 +9,9 @@ class ContextTestCase(TestCase):
     def test_create(self):
         """Basic context testing"""
         # Create a standalone context
+        # os.environ['GLCONTEXT_WIN_LIBGL'] = 'moo.dll'
+        # os.environ['GLCONTEXT_LINUX_LIBGL'] = 'ligGL.so.1'
+        # os.environ['GLCONTEXT_GLVERSION'] = '430'
         backend = glcontext.default_backend()
         ctx = backend(mode='standalone', glversion=330)
 
