@@ -103,6 +103,9 @@ Parameters
 
 ### x11
 
+If `libgl` is not passed in the backend will try to locate
+the GL library using `ctypes.utils.find_library`.
+
 Parameters
 
 * `glversion` (`int`): The minimum OpenGL version for the context
@@ -121,6 +124,9 @@ Parameters
 ### egl
 
 Only supports standalone mode.
+
+If `libgl` and/or `libegl` is not passed in the backend will try to locate
+GL and/or EGL library using `ctypes.utils.find_library`.
 
 Parameters
 

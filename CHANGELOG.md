@@ -1,7 +1,13 @@
 
 # Change Log
 
-## 2.0.1
+## 2.2.0
+
+* x11 and egl backend will now use `ctypes.utils.find_library`
+  to locate GL and EGL if not `libgl` and `libegl` parameter
+  is passed to the backend
+
+## 2.1.0
 
 * Support setting backend arguments using environment variables.
   * `GLCONTEXT_GLVERSION` for setting opengl version
