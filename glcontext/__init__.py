@@ -67,8 +67,12 @@ def _wgl():
 def _x11():
     """Create x11 backend"""
     from glcontext import x11
+    from ctypes.util import find_library
 
     def create(*args, **kwargs):
+        if not kwargs.get('libgl'):
+            kwargs['libgl'] = find_library('GL') 
+
         _apply_env_var(kwargs, 'glversion', 'GLCONTEXT_GLVERSION', arg_type=int)
         _apply_env_var(kwargs, 'libgl', 'GLCONTEXT_LINUX_LIBGL')
         _apply_env_var(kwargs, 'libx11', 'GLCONTEXT_LINUX_LIBX11')
@@ -90,8 +94,14 @@ def _darwin():
 
 def _egl():
     from glcontext import egl
+    from ctypes.util import find_library
 
     def create(*args, **kwargs):
+        if not kwargs.get('libgl'):
+            kwargs['libgl'] = find_library('GL') 
+        if not kwargs.get('libegl'):
+            kwargs['libegl'] = find_library('EGL') 
+
         _apply_env_var(kwargs, 'glversion', 'GLCONTEXT_GLVERSION', arg_type=int)
         _apply_env_var(kwargs, 'libgl', 'GLCONTEXT_LINUX_LIBGL')
         _apply_env_var(kwargs, 'libegl', 'GLCONTEXT_LINUX_LIBEGL')

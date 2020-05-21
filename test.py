@@ -1,4 +1,6 @@
 import glcontext
 
-ctx = glcontext.default_backend(standalone=True)(300)
-print(ctx.load('glBegin'))
+backend = glcontext.default_backend()
+ctx = backend(mode='standalone', glversion=330)  #, libgl='libGL.so.1')
+print(ctx)
+print(ctx.load('glViewport'))
