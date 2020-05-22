@@ -16,6 +16,7 @@ typedef void * EGLDeviceEXT;
 #define EGL_DEFAULT_DISPLAY 0
 #define EGL_NO_CONTEXT 0
 #define EGL_NO_SURFACE 0
+#define EGL_NO_DISPLAY 0
 #define EGL_PBUFFER_BIT 0x0001
 #define EGL_RENDERABLE_TYPE 0x3040
 #define EGL_NONE 0x3038
@@ -78,14 +79,15 @@ struct GLContext {
 PyTypeObject * GLContext_type;
 
 GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwargs) {
-    static char * keywords[] = {"mode", "libgl", "libegl", "glversion", NULL};
+    static char * keywords[] = {"mode", "libgl", "libegl", "glversion", "device_index", NULL};
 
     const char * mode = "standalone";
     const char * libgl = "libGL.so";
     const char * libegl = "libEGL.so";
     int glversion = 330;
+    int device_index = 0;
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "|sssi", keywords, &mode, &libgl, &libegl, &glversion)) {
+    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "|sssii", keywords, &mode, &libgl, &libegl, &glversion, &device_index)) {
         return NULL;
     }
 
@@ -157,22 +159,44 @@ GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwa
         return NULL;
     }
 
-    // res->m_eglQueryDevicesEXT = (m_eglQueryDevicesEXTProc)res->m_eglGetProcAddress("eglQueryDevicesEXT");
-    // if (!res->m_eglQueryDevicesEXT) {
-    //     return NULL;
-    // }
+    res->m_eglQueryDevicesEXT = (m_eglQueryDevicesEXTProc)res->m_eglGetProcAddress("eglQueryDevicesEXT");
+    if (!res->m_eglQueryDevicesEXT) {
+        PyErr_Format(PyExc_Exception, "eglQueryDevicesEXT not found");
+        return NULL;
+    }
 
-    // res->m_eglGetPlatformDisplayEXT = (m_eglGetPlatformDisplayEXTProc)res->m_eglGetProcAddress("eglGetPlatformDisplayEXT");
-    // if (!res->m_eglGetPlatformDisplayEXT) {
-    //     return NULL;
-    // }
+    res->m_eglGetPlatformDisplayEXT = (m_eglGetPlatformDisplayEXTProc)res->m_eglGetProcAddress("eglGetPlatformDisplayEXT");
+    if (!res->m_eglGetPlatformDisplayEXT) {
+        PyErr_Format(PyExc_Exception, "eglGetPlatformDisplayEXT not found");
+        return NULL;
+    }
 
     if (!strcmp(mode, "standalone")) {
         res->standalone = true;
 
-        res->dpy = res->m_eglGetDisplay(EGL_DEFAULT_DISPLAY);
-        if (!res->dpy) {
-            PyErr_Format(PyExc_Exception, "eglGetDisplay failed (0x%x)", res->m_eglGetError());
+        EGLint num_devices;
+        if (!res->m_eglQueryDevicesEXT(0, NULL, &num_devices)) {
+            PyErr_Format(PyExc_Exception, "eglQueryDevicesEXT failed (0x%x)", res->m_eglGetError());
+            return NULL;
+        }
+
+        if (device_index >= num_devices) {
+            PyErr_Format(PyExc_Exception, "requested device index %d, but found %d devices", device_index, num_devices);
+            return NULL;
+        }
+
+        EGLDeviceEXT* devices = malloc(sizeof(EGLDeviceEXT) * num_devices);
+        if (!res->m_eglQueryDevicesEXT(num_devices, devices, &num_devices)) {
+            PyErr_Format(PyExc_Exception, "eglQueryDevicesEXT failed (0x%x)", res->m_eglGetError());
+            free(devices);
+            return NULL;
+        }
+        EGLDeviceEXT device = devices[device_index];
+        free(devices);
+
+        res->dpy = res->m_eglGetPlatformDisplayEXT(EGL_PLATFORM_DEVICE_EXT, device, 0);
+        if (res->dpy == EGL_NO_DISPLAY) {
+            PyErr_Format(PyExc_Exception, "eglGetPlatformDisplayEXT failed (0x%x)", res->m_eglGetError());
             return NULL;
         }
 
