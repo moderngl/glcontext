@@ -102,10 +102,11 @@ def _egl():
         if not kwargs.get('libegl'):
             kwargs['libegl'] = find_library('EGL') 
 
+        _apply_env_var(kwargs, 'device_index', 'GLCONTEXT_DEVICE_INDEX', arg_type=int)
         _apply_env_var(kwargs, 'glversion', 'GLCONTEXT_GLVERSION', arg_type=int)
         _apply_env_var(kwargs, 'libgl', 'GLCONTEXT_LINUX_LIBGL')
         _apply_env_var(kwargs, 'libegl', 'GLCONTEXT_LINUX_LIBEGL')
-        kwargs = _strip_kwargs(kwargs, ['glversion', 'mode', 'libgl', 'libegl'])
+        kwargs = _strip_kwargs(kwargs, ['glversion', 'mode', 'libgl', 'libegl', 'device_index'])
         return egl.create_context(**kwargs)
 
     return create
