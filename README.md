@@ -134,6 +134,7 @@ Parameters
 * `mode` (`str`): Creation mode. `standalone`
 * `libgl` (`str`): Name of gl library to load (default: `libGL.so`)
 * `libegl` (`str`): Name of gl library to load (default: `libEGL.so`)
+* `device_index` (`int`) The device index to use (default: `0`)
 
 ## Environment Variables
 
@@ -151,6 +152,8 @@ GLCONTEXT_LINUX_LIBX11
 GLCONTEXT_LINUX_LIBEGL
 # Override gl dll on windows. For example: opengl32_custom.dll
 GLCONTEXT_WIN_LIBGL
+# Override the device index (egl)
+GLCONTEXT_DEVICE_INDEX
 ```
 
 ## Running tests
