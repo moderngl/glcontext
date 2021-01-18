@@ -58,7 +58,7 @@ ext_modules = {
 
 setup(
     name='glcontext',
-    version='2.3.dev0',
+    version='2.3',
     description='Portable OpenGL Context',
     long_description=open('README.md').read(),
     long_description_content_type='text/markdown',

@@ -1,6 +1,15 @@
 
 # Change Log
 
+## 2.3.0
+
+python 3.9 support
+
+## 2.3.dev0
+
+* EGL backend will now use `eglQueryDevicesEXT` instead of only relying on `EGL_DEFAULT_DISPLAY`
+* EGL backend now supports `device_index` for selecting a device
+
 ## 2.2.0
 
 * x11 and egl backend will now use `ctypes.utils.find_library`
