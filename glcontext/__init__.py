@@ -73,9 +73,13 @@ def _x11():
         if not kwargs.get('libgl'):
             kwargs['libgl'] = find_library('GL') 
 
+        libx11 = find_library("X11")
+        if not libx11:
+            raise SystemError("Cannot find the X11 library")
+
         _apply_env_var(kwargs, 'glversion', 'GLCONTEXT_GLVERSION', arg_type=int)
         _apply_env_var(kwargs, 'libgl', 'GLCONTEXT_LINUX_LIBGL')
-        _apply_env_var(kwargs, 'libx11', 'GLCONTEXT_LINUX_LIBX11')
+        _apply_env_var(kwargs, libx11, 'GLCONTEXT_LINUX_LIBX11')
         kwargs = _strip_kwargs(kwargs, ['glversion', 'mode', 'libgl', 'libx11'])
         return x11.create_context(**kwargs)
 
