@@ -1,5 +1,5 @@
 import platform
-
+import sys
 from setuptools import Extension, setup
 
 PLATFORMS = {'windows', 'linux', 'darwin'}
@@ -26,6 +26,7 @@ if target == 'darwin':
 wgl = Extension(
     name='glcontext.wgl',
     sources=['glcontext/wgl.cpp'],
+    extra_compile_args=['-fpermissive'] if 'GCC' in sys.version else [],
     libraries=['user32', 'gdi32'],
 )
 
