@@ -16,7 +16,7 @@ jobs:
 
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu18.04, windows-latest, macos-latest]
         python-version: ['3.9']
         architecture: ['x64', 'x86']
 
