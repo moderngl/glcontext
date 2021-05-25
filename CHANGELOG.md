@@ -1,6 +1,11 @@
 
 # Change Log
 
+## 2.3.3
+
+* Missing manylinux wheels for python 3.9
+* Minor issue in setup.py
+
 ## 2.3.0
 
 python 3.9 support
