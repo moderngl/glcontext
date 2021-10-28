@@ -71,11 +71,44 @@ jobs:
           name: dist
           path: "dist/*.whl"
 
+  aarch64_wheel:
+    strategy:
+      matrix:
+        pyver: [cp36-cp36m, cp37-cp37m, cp38-cp38, cp39-cp39]
+      fail-fast: false
+    runs-on: ubuntu-latest
+    env:
+      py: /opt/python/${{ matrix.pyver }}/bin/python
+      img: quay.io/pypa/manylinux2014_aarch64
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+    - name: Set up QEMU
+      id: qemu
+      uses: docker/setup-qemu-action@v1
+    - name: Build wheel
+      run: |
+            docker run --rm -v ${{ github.workspace }}:/ws:rw --workdir=/ws \
+            ${{ env.img }} \
+            bash -exc '${{ env.py }} -m venv .env && \
+            source .env/bin/activate && \
+            python -m pip install -U auditwheel pip wheel setuptools && \
+            python setup.py bdist_wheel && \
+            mv dist temp && \
+            python -m auditwheel repair -w dist temp/*-linux_aarch64.whl && \
+            deactivate'
+    - name: upload
+      uses: actions/upload-artifact@v2
+      with:
+        name: dist
+        path: "dist/*.whl"
+
   publish:
     name: publish
     needs:
       - sdist
       - wheel
+      - aarch64_wheel
     runs-on: ubuntu-latest
 
     steps:

@@ -34,3 +34,29 @@ jobs:
 
       - name: wheel
         run: python setup.py bdist_wheel
+
+  build-aarch64:
+    strategy:
+      fail-fast: false
+    runs-on: ubuntu-latest
+    env:
+      py: /opt/python/cp39-cp39/bin/python
+      img: quay.io/pypa/manylinux2014_aarch64
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+
+    - name: Set up QEMU
+      id: qemu
+      uses: docker/setup-qemu-action@v1
+
+    - name: Install dependencies
+      run: |
+            docker run --rm -v ${{ github.workspace }}:/ws:rw --workdir=/ws \
+            ${{ env.img }} \
+            bash -exc '${{ env.py }} -m venv .env && \
+            source .env/bin/activate && \
+            python -m pip install -U pip wheel setuptools && \
+            python setup.py bdist_wheel && \
+            deactivate'
