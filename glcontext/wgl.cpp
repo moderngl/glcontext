@@ -55,9 +55,24 @@ GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwa
 
     GLContext * res = PyObject_New(GLContext, GLContext_type);
 
-    res->libgl = LoadLibrary(libgl);
+    // The mode parameter is required for dll's specifed as libgl
+    // to load successfully along with its dependencies on Python 3.8+.
+    // This is due to the introduction of using a short dll load path
+    // inside of Python 3.8+.
+
+    int load_mode = LOAD_LIBRARY_SEARCH_DEFAULT_DIRS; // Search default dirs first
+
+    // Check whether libgl contains `/` or `\\`.
+    // We can treat that `libgl` would be absolute in that case.
+    if (strchr(libgl, '/') || strchr(libgl, '\\'))
+    {
+        // Search the dirs in which the dll is located
+        load_mode |= LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR;
+    }
+    res->libgl = LoadLibraryEx(libgl, NULL, (DWORD)load_mode);
     if (!res->libgl) {
-        PyErr_Format(PyExc_Exception, "%s not loaded", libgl);
+        DWORD last_error = GetLastError();
+        PyErr_Format(PyExc_Exception, "%s not loaded. Error code: %ld.", libgl, last_error);
         return NULL;
     }
 
