@@ -58,6 +58,13 @@ def _wgl():
     def create(*args, **kwargs):
         _apply_env_var(kwargs, 'glversion', 'GLCONTEXT_GLVERSION', arg_type=int)
         _apply_env_var(kwargs, 'libgl', 'GLCONTEXT_WIN_LIBGL')
+
+        # make sure libgl is an absolute path
+        if 'libgl' in kwargs:
+            _libgl = kwargs['libgl']
+            if '/' in _libgl or '\\' in _libgl:
+                kwargs['libgl'] = os.path.abspath(_libgl)
+
         kwargs = _strip_kwargs(kwargs, ['glversion', 'mode', 'libgl'])
         return wgl.create_context(**kwargs)
 
