@@ -71,14 +71,14 @@ jobs:
       - name: download
         uses: actions/download-artifact@v2
         with:
-          path: dist/
+          path: temp-dist/
       # Only copy the wheels and source dist files. Additional lingering
       # files will cause issues
       - name: Copy Files to dist
         shell: bash
         run: |
-          cp dist/*/*.whl dist/
-          cp dist/*/*.tar.gz dist/
+          cp temp-dist/*/*.whl dist/
+          cp temp-dist/*/*.tar.gz dist/
       - uses: pypa/gh-action-pypi-publish@v1.4.2
         with:
           user: __token__
