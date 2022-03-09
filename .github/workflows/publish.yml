@@ -66,15 +66,19 @@ jobs:
       - build_sdist
       - build_wheels
     runs-on: ubuntu-latest
-    # if: ${{ github.event_name == 'release' && github.event.action == 'published' }}
+    # if: ${{ github.event_name == 'release' && github.event.action == 'created' }}
     steps:
       - name: download
         uses: actions/download-artifact@v2
         with:
           path: dist/
+      # Only copy the wheels and source dist files. Additional lingering
+      # files will cause issues
       - name: Copy Files to dist
         shell: bash
-        run: cp dist/*/* dist/
+        run: |
+          cp dist/*/*.whl dist/
+          cp dist/*/*.tar.gz dist/
       - uses: pypa/gh-action-pypi-publish@v1.4.2
         with:
           user: __token__
