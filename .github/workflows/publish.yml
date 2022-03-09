@@ -72,7 +72,9 @@ jobs:
         uses: actions/download-artifact@v2
         with:
           path: dist/
-
+      - name: Copy Files to dist
+        shell: bash
+        run: cp dist/*/* dist/
       - uses: pypa/gh-action-pypi-publish@v1.4.2
         with:
           user: __token__
