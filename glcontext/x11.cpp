@@ -1,4 +1,5 @@
 #include <Python.h>
+#include <structmember.h>
 
 #include <dlfcn.h>
 #include <X11/Xlib.h>
@@ -53,8 +54,8 @@ struct GLContext {
     Window wnd;
     GLXContext ctx;
 
-    bool standalone;
-    bool own_window;
+    int standalone;
+    int own_window;
     void * old_context;
     void * old_display;
     void * old_window;
@@ -468,8 +469,14 @@ PyMethodDef GLContext_methods[] = {
     {},
 };
 
+PyMemberDef GLContext_members[] = {
+    {"standalone", T_BOOL, offsetof(GLContext, standalone), READONLY, NULL},
+    {},
+};
+
 PyType_Slot GLContext_slots[] = {
     {Py_tp_methods, GLContext_methods},
+    {Py_tp_members, GLContext_members},
     {Py_tp_dealloc, GLContext_dealloc},
     {},
 };

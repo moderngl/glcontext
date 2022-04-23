@@ -1,4 +1,5 @@
 #include <Python.h>
+#include <structmember.h>
 
 #include <Windows.h>
 
@@ -26,7 +27,7 @@ struct GLContext {
     HDC hdc;
     HGLRC hrc;
 
-    bool standalone;
+    int standalone;
     void * old_context;
     void * old_display;
 
@@ -303,8 +304,14 @@ PyMethodDef GLContext_methods[] = {
     {},
 };
 
+PyMemberDef GLContext_members[] = {
+    {"standalone", T_BOOL, offsetof(GLContext, standalone), READONLY, NULL},
+    {},
+};
+
 PyType_Slot GLContext_slots[] = {
     {Py_tp_methods, GLContext_methods},
+    {Py_tp_members, GLContext_members},
     {Py_tp_dealloc, GLContext_dealloc},
     {},
 };

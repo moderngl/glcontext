@@ -1,4 +1,5 @@
 #include <Python.h>
+#include <structmember.h>
 
 #include <dlfcn.h>
 
@@ -61,7 +62,7 @@ struct GLContext {
     EGLDisplay dpy;
     EGLConfig cfg;
 
-    bool standalone;
+    int standalone;
 
     m_eglGetErrorProc m_eglGetError;
     m_eglGetDisplayProc m_eglGetDisplay;
@@ -285,8 +286,14 @@ PyMethodDef GLContext_methods[] = {
     {},
 };
 
+PyMemberDef GLContext_members[] = {
+    {"standalone", T_BOOL, offsetof(GLContext, standalone), READONLY, NULL},
+    {},
+};
+
 PyType_Slot GLContext_slots[] = {
     {Py_tp_methods, GLContext_methods},
+    {Py_tp_members, GLContext_members},
     {Py_tp_dealloc, GLContext_dealloc},
     {},
 };
