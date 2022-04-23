@@ -1,6 +1,10 @@
 
 # Change Log
 
+## 2.3.6
+
+Expose headless/standalone flag
+
 ## 2.3.3
 
 * Missing manylinux wheels for python 3.9
