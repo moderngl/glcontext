@@ -39,6 +39,7 @@ typedef Colormap (* m_XCreateColormapProc)(Display *, Window, Visual *, int);
 typedef Window (* m_XCreateWindowProc)(Display *, Window, int, int, unsigned int, unsigned int, unsigned int, int, unsigned int, Visual *, unsigned long, XSetWindowAttributes *);
 typedef int (* m_XDestroyWindowProc)(Display *, Window);
 typedef int (* m_XCloseDisplayProc)(Display *);
+typedef int (* m_XFreeProc)(void *);
 typedef XErrorHandler (* m_XSetErrorHandlerProc)(XErrorHandler);
 
 int SilentXErrorHandler(Display * d, XErrorEvent * e) {
@@ -51,6 +52,8 @@ struct GLContext {
     void * libgl;
     void * libx11;
     Display * dpy;
+    GLXFBConfig * fbc;
+    XVisualInfo * vi;
     Window wnd;
     GLXContext ctx;
 
@@ -78,6 +81,7 @@ struct GLContext {
     m_XCreateWindowProc m_XCreateWindow;
     m_XDestroyWindowProc m_XDestroyWindow;
     m_XCloseDisplayProc m_XCloseDisplay;
+    m_XFreeProc m_XFree;
     m_XSetErrorHandlerProc m_XSetErrorHandler;
 };
 
@@ -206,6 +210,12 @@ GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwa
             return NULL;
         }
 
+        res->m_XFree = (m_XFreeProc)dlsym(res->libx11, "XFree");
+        if (!res->m_XFree) {
+            PyErr_Format(PyExc_Exception, "(detect) XFree not found");
+            return NULL;
+        }
+
         res->m_XSetErrorHandler = (m_XSetErrorHandlerProc)dlsym(res->libx11, "XSetErrorHandler");
         if (!res->m_XSetErrorHandler) {
             PyErr_Format(PyExc_Exception, "(detect) XSetErrorHandler not found");
@@ -235,6 +245,8 @@ GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwa
             return NULL;
         }
 
+        res->fbc = NULL;
+        res->vi = NULL;
         return res;
     }
 
@@ -261,9 +273,9 @@ GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwa
         }
 
         int nelements = 0;
-        GLXFBConfig * fbc = res->m_glXChooseFBConfig(res->dpy, res->m_XDefaultScreen(res->dpy), 0, &nelements);
+        res->fbc = res->m_glXChooseFBConfig(res->dpy, res->m_XDefaultScreen(res->dpy), 0, &nelements);
 
-        if (!fbc) {
+        if (!res->fbc) {
             res->m_XCloseDisplay(res->dpy);
             PyErr_Format(PyExc_Exception, "(share) glXChooseFBConfig failed");
             return NULL;
@@ -279,9 +291,9 @@ GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwa
             None,
         };
 
-        XVisualInfo * vi = res->m_glXChooseVisual(res->dpy, res->m_XDefaultScreen(res->dpy), attribute_list);
+        res->vi = res->m_glXChooseVisual(res->dpy, res->m_XDefaultScreen(res->dpy), attribute_list);
 
-        if (!vi) {
+        if (!res->vi) {
             res->m_XCloseDisplay(res->dpy);
             PyErr_Format(PyExc_Exception, "(share) glXChooseVisual:  cannot choose visual");
             return NULL;
@@ -304,9 +316,9 @@ GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwa
                 0, 0,
             };
 
-            res->ctx = res->m_glXCreateContextAttribsARB(res->dpy, *fbc, ctx_share, true, attribs);
+            res->ctx = res->m_glXCreateContextAttribsARB(res->dpy, *res->fbc, ctx_share, true, attribs);
         } else {
-            res->ctx = res->m_glXCreateContext(res->dpy, vi, ctx_share, true);
+            res->ctx = res->m_glXCreateContext(res->dpy, res->vi, ctx_share, true);
         }
 
         if (!res->ctx) {
@@ -340,9 +352,9 @@ GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwa
         }
 
         int nelements = 0;
-        GLXFBConfig * fbc = res->m_glXChooseFBConfig(res->dpy, res->m_XDefaultScreen(res->dpy), 0, &nelements);
+        res->fbc = res->m_glXChooseFBConfig(res->dpy, res->m_XDefaultScreen(res->dpy), 0, &nelements);
 
-        if (!fbc) {
+        if (!res->fbc) {
             res->m_XCloseDisplay(res->dpy);
             PyErr_Format(PyExc_Exception, "(standalone) glXChooseFBConfig failed");
             return NULL;
@@ -358,22 +370,22 @@ GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwa
             None,
         };
 
-        XVisualInfo * vi = res->m_glXChooseVisual(res->dpy, res->m_XDefaultScreen(res->dpy), attribute_list);
+        res->vi = res->m_glXChooseVisual(res->dpy, res->m_XDefaultScreen(res->dpy), attribute_list);
 
-        if (!vi) {
+        if (!res->vi) {
             res->m_XCloseDisplay(res->dpy);
             PyErr_Format(PyExc_Exception, "(standalone) glXChooseVisual: cannot choose visual");
             return NULL;
         }
 
         XSetWindowAttributes swa;
-        swa.colormap = res->m_XCreateColormap(res->dpy, res->m_XRootWindow(res->dpy, vi->screen), vi->visual, AllocNone);
+        swa.colormap = res->m_XCreateColormap(res->dpy, res->m_XRootWindow(res->dpy, res->vi->screen), res->vi->visual, AllocNone);
         swa.border_pixel = 0;
         swa.event_mask = StructureNotifyMask;
 
         res->wnd = res->m_XCreateWindow(
-            res->dpy, res->m_XRootWindow(res->dpy, vi->screen), 0, 0, 1, 1, 0, vi->depth, InputOutput,
-            vi->visual, CWBorderPixel | CWColormap | CWEventMask, &swa
+            res->dpy, res->m_XRootWindow(res->dpy, res->vi->screen), 0, 0, 1, 1, 0, res->vi->depth, InputOutput,
+            res->vi->visual, CWBorderPixel | CWColormap | CWEventMask, &swa
         );
 
         if (!res->wnd) {
@@ -399,9 +411,9 @@ GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwa
                 0, 0,
             };
 
-            res->ctx = res->m_glXCreateContextAttribsARB(res->dpy, *fbc, NULL, true, attribs);
+            res->ctx = res->m_glXCreateContextAttribsARB(res->dpy, *res->fbc, NULL, true, attribs);
         } else {
-            res->ctx = res->m_glXCreateContext(res->dpy, vi, NULL, true);
+            res->ctx = res->m_glXCreateContext(res->dpy, res->vi, NULL, true);
         }
 
         if (!res->ctx) {
@@ -453,6 +465,14 @@ PyObject * GLContext_meth_release(GLContext * self) {
     if (self->own_window) {
         self->m_XDestroyWindow(self->dpy, self->wnd);
         self->m_XCloseDisplay(self->dpy);
+    }
+    if (self->fbc) {
+        self->m_XFree(self->fbc);
+        self->fbc = NULL;
+    }
+    if (self->vi) {
+        self->m_XFree(self->vi);
+        self->vi = NULL;
     }
     Py_RETURN_NONE;
 }
