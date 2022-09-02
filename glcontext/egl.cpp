@@ -13,12 +13,15 @@ typedef void * EGLConfig;
 typedef void * EGLSurface;
 typedef void * EGLContext;
 typedef void * EGLDeviceEXT;
+typedef void * EGLDisplay;
+
 
 #define EGL_DEFAULT_DISPLAY 0
 #define EGL_NO_CONTEXT 0
 #define EGL_NO_SURFACE 0
 #define EGL_NO_DISPLAY 0
 #define EGL_PBUFFER_BIT 0x0001
+#define EGL_WINDOW_BIT 0x0004
 #define EGL_RENDERABLE_TYPE 0x3040
 #define EGL_NONE 0x3038
 #define EGL_OPENGL_BIT 0x0008
@@ -39,8 +42,9 @@ typedef void * EGLDeviceEXT;
 #define EGL_PLATFORM_DEVICE_EXT 0x313F
 #define EGL_PLATFORM_WAYLAND_EXT 0x31D8
 #define EGL_PLATFORM_X11_EXT 0x31D5
+#define EGL_DRAW 0x3059
+#define EGL_READ 0x305A
 
-typedef void * EGLDisplay;
 typedef EGLint (* m_eglGetErrorProc)();
 typedef EGLDisplay (* m_eglGetDisplayProc)(EGLNativeDisplayType);
 typedef EGLBoolean (* m_eglInitializeProc)(EGLDisplay, EGLint *, EGLint *);
@@ -52,6 +56,9 @@ typedef EGLBoolean (* m_eglMakeCurrentProc)(EGLDisplay, EGLSurface, EGLSurface, 
 typedef void (* (* m_eglGetProcAddressProc)(const char *))();
 typedef EGLBoolean (* m_eglQueryDevicesEXTProc)(EGLint, EGLDeviceEXT *, EGLint *);
 typedef EGLDisplay (* m_eglGetPlatformDisplayEXTProc) (EGLenum, void *, const EGLint *);
+typedef EGLContext (* m_eglGetCurrentContextProc) (void);	 
+typedef EGLSurface (* m_eglGetCurrentSurfaceProc ) (EGLint readdraw);
+typedef EGLDisplay (* m_eglGetCurrentDisplayProc )(void);	
 
 struct GLContext {
     PyObject_HEAD
@@ -61,6 +68,7 @@ struct GLContext {
     EGLContext ctx;
     EGLDisplay dpy;
     EGLConfig cfg;
+    EGLSurface wnd;
 
     int standalone;
 
@@ -75,6 +83,9 @@ struct GLContext {
     m_eglGetProcAddressProc m_eglGetProcAddress;
     m_eglQueryDevicesEXTProc m_eglQueryDevicesEXT;
     m_eglGetPlatformDisplayEXTProc m_eglGetPlatformDisplayEXT;
+    m_eglGetCurrentContextProc m_eglGetCurrentContext;
+    m_eglGetCurrentSurfaceProc m_eglGetCurrentSurface;
+    m_eglGetCurrentDisplayProc m_eglGetCurrentDisplay;
 };
 
 PyTypeObject * GLContext_type;
@@ -172,8 +183,27 @@ GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwa
         return NULL;
     }
 
+    res->m_eglGetCurrentDisplay = (m_eglGetCurrentDisplayProc)res->m_eglGetProcAddress("eglGetCurrentDisplay");
+    if (!res->m_eglGetCurrentDisplay) {
+        PyErr_Format(PyExc_Exception, "eglGetCurrentDisplay not found");
+        return NULL;
+    }
+
+    res->m_eglGetCurrentContext = (m_eglGetCurrentContextProc)res->m_eglGetProcAddress("eglGetCurrentContext");
+    if (!res->m_eglGetCurrentContext) {
+        PyErr_Format(PyExc_Exception, "eglGetCurrentContext not found");
+        return NULL;
+    }
+
+    res->m_eglGetCurrentSurface = (m_eglGetCurrentSurfaceProc)res->m_eglGetProcAddress("eglGetCurrentSurface");
+    if (!res->m_eglGetCurrentSurface) {
+        PyErr_Format(PyExc_Exception, "eglGetCurrentSurfaceProc not found");
+        return NULL;
+    }
+
     if (!strcmp(mode, "standalone")) {
         res->standalone = true;
+        res->wnd = EGL_NO_SURFACE;
 
         EGLint num_devices;
         if (!res->m_eglQueryDevicesEXT(0, NULL, &num_devices)) {
@@ -246,6 +276,66 @@ GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwa
         return res;
     }
 
+    if (!strcmp(mode, "share")) {
+        res->standalone = false;
+
+        EGLContext ctx_share = res->m_eglGetCurrentContext();
+        if (!ctx_share) {
+            PyErr_Format(PyExc_Exception, "(share) eglGetCurrentContext: cannot detect OpenGL context");
+            return NULL;
+        }
+
+        res->wnd = res->m_eglGetCurrentSurface(EGL_DRAW);
+        if (!res->wnd) {
+            PyErr_Format(PyExc_Exception, "(share) m_eglGetCurrentSurface failed (0x%x)", res->m_eglGetError());
+            return NULL;
+        }
+
+        res->dpy = res->m_eglGetCurrentDisplay();
+        if (res->dpy == EGL_NO_DISPLAY) {
+            PyErr_Format(PyExc_Exception, "eglGetCurrentDisplay failed (0x%x)", res->m_eglGetError());
+            return NULL;
+        }
+
+        EGLint config_attribs[] = {
+            EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
+            EGL_BLUE_SIZE, 8,
+            EGL_GREEN_SIZE, 8,
+            EGL_RED_SIZE, 8,
+            EGL_DEPTH_SIZE, 24,
+            EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT,
+            EGL_NONE
+        };
+
+        EGLint num_configs = 0;
+        if (!res->m_eglChooseConfig(res->dpy, config_attribs, &res->cfg, 1, &num_configs)) {
+            PyErr_Format(PyExc_Exception, "eglChooseConfig failed (0x%x)", res->m_eglGetError());
+            return NULL;
+        }
+
+        if (!res->m_eglBindAPI(EGL_OPENGL_API)) {
+            PyErr_Format(PyExc_Exception, "eglBindAPI failed (0x%x)", res->m_eglGetError());
+            return NULL;
+        }
+
+        int ctxattribs[] = {
+            EGL_CONTEXT_MAJOR_VERSION, glversion / 100 % 10,
+            EGL_CONTEXT_MINOR_VERSION, glversion / 10 % 10,
+            EGL_CONTEXT_OPENGL_PROFILE_MASK, EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT,
+            // EGL_CONTEXT_OPENGL_FORWARD_COMPATIBLE, 1,
+            EGL_NONE,
+        };
+
+        res->ctx = res->m_eglCreateContext(res->dpy, res->cfg, ctx_share, ctxattribs);
+        if (!res->ctx) {
+            PyErr_Format(PyExc_Exception, "eglCreateContext failed (0x%x)", res->m_eglGetError());
+            return NULL;
+        }
+
+        res->m_eglMakeCurrent(res->dpy, res->wnd, res->wnd, res->ctx);
+        return res;
+    }
+
     PyErr_Format(PyExc_Exception, "unknown mode");
     return NULL;
 }
@@ -260,7 +350,7 @@ PyObject * GLContext_meth_load(GLContext * self, PyObject * arg) {
 }
 
 PyObject * GLContext_meth_enter(GLContext * self) {
-    self->m_eglMakeCurrent(self->dpy, EGL_NO_SURFACE, EGL_NO_SURFACE, self->ctx);
+    self->m_eglMakeCurrent(self->dpy, self->wnd, self->wnd, self->ctx);
     Py_RETURN_NONE;
 }
 
