@@ -1,6 +1,10 @@
 
 # Change Log
 
+## 2.3.7
+
+Python 3.11 support
+
 ## 2.3.6
 
 Expose headless/standalone flag
