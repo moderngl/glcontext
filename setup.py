@@ -44,6 +44,12 @@ egl = Extension(
     libraries=['dl'],
 )
 
+headless = Extension(
+    name='glcontext.headless',
+    sources=['glcontext/headless.cpp'],
+    libraries=['EGL'],
+)
+
 darwin = Extension(
     name='glcontext.darwin',
     sources=['glcontext/darwin.cpp'],
@@ -53,7 +59,7 @@ darwin = Extension(
 
 ext_modules = {
     'windows': [wgl],
-    'linux': [x11, egl],
+    'linux': [x11, egl, headless],
     'darwin': [darwin],
 }
 
