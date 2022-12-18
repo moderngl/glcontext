@@ -61,6 +61,7 @@ jobs:
             ${{ env.img }} \
             bash -exc '${{ env.py }} -m venv .env && \
             source .env/bin/activate && \
+            apt-get update && apt-get install -y libgl1-mesa-dev libegl1-mesa-dev && \
             python -m pip install -U pip wheel setuptools && \
             python setup.py bdist_wheel && \
             deactivate'
