@@ -50,6 +50,9 @@ PyObject * meth_load_opengl_function(PyObject * self, PyObject * arg) {
 
 #else
 
+#include <GL/gl.h>
+#include <GL/glx.h>
+
 PyObject * meth_load_opengl_function(PyObject * self, PyObject * arg) {
     if (!PyUnicode_CheckExact(arg)) {
         return NULL;
