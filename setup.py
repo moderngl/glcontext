@@ -50,6 +50,29 @@ headless = Extension(
     libraries=['EGL'],
 )
 
+if target == 'windows':
+    windowed = Extension(
+        name='glcontext.windowed',
+        sources=['glcontext/windowed.cpp'],
+        libraries=['opengl32'],
+    )
+
+if target == 'linux':
+    windowed = Extension(
+        name='glcontext.windowed',
+        sources=['glcontext/windowed.cpp'],
+        extra_compile_args=['-fpermissive'],
+        libraries=['GL'],
+    )
+
+if target == 'darwin':
+    windowed = Extension(
+        name='glcontext.windowed',
+        sources=['glcontext/windowed.cpp'],
+        extra_compile_args=['-fpermissive', '-Wno-deprecated-declarations'],
+        extra_link_args=['-framework', 'OpenGL', '-Wno-deprecated'],
+    )
+
 darwin = Extension(
     name='glcontext.darwin',
     sources=['glcontext/darwin.cpp'],
@@ -58,9 +81,9 @@ darwin = Extension(
 )
 
 ext_modules = {
-    'windows': [wgl],
-    'linux': [x11, egl, headless],
-    'darwin': [darwin],
+    'windows': [wgl, windowed],
+    'linux': [x11, egl, headless, windowed],
+    'darwin': [darwin, windowed],
 }
 
 setup(
