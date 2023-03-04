@@ -47,7 +47,7 @@ PyMethodDef GLContext_methods[] = {
 
 PyType_Slot GLContext_slots[] = {
     {Py_tp_methods, GLContext_methods},
-    {Py_tp_dealloc, GLContext_dealloc},
+    {Py_tp_dealloc, (void *)GLContext_dealloc},
     {},
 };
 

@@ -58,7 +58,7 @@ PyObject * meth_load_opengl_function(PyObject * self, PyObject * arg) {
         return NULL;
     }
     const char * name = PyUnicode_AsUTF8(arg);
-    return PyLong_FromVoidPtr(glXGetProcAddress((unsigned char *)name));
+    return PyLong_FromVoidPtr((void *)glXGetProcAddress((unsigned char *)name));
 }
 
 #endif
