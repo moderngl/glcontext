@@ -81,9 +81,9 @@ darwin = Extension(
 )
 
 ext_modules = {
-    'windows': [wgl, windowed],
-    'linux': [x11, egl, headless, windowed],
-    'darwin': [darwin, windowed],
+    'windows': [wgl],
+    'linux': [x11, egl],
+    'darwin': [darwin],
 }
 
 setup(
