@@ -1,0 +1,40 @@
+name: release
+
+on:
+  workflow_dispatch:
+
+jobs:
+  release:
+    name: Build wheels on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-20.04, windows-2019, macos-11]
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: setup
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          architecture: x64
+
+      - name: update
+        run: python -m pip install -U pip wheel setuptools
+
+      - name: deps
+        run: python -m pip install cibuildwheel==2.14.1
+
+      - name: sdist
+        if: matrix.os == 'ubuntu-20.04'
+        run: python setup.py sdist -d package
+
+      - name: wheels
+        run: python -m cibuildwheel --output-dir package
+
+      - name: upload
+        uses: actions/upload-artifact@v3
+        with:
+          name: package
+          path: package
