@@ -1,6 +1,6 @@
 [![pypi](https://badge.fury.io/py/glcontext.svg)](https://pypi.python.org/pypi/glcontext)
 
-<img align="right" src="https://github.com/moderngl/glcontext/raw/master/.github/icon_small.png">
+<img align="right" src="https://github.com/moderngl/glcontext/raw/master/.github/icon.svg">
 
 # glcontext
 
