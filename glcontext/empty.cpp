@@ -38,7 +38,7 @@ void GLContext_dealloc(GLContext * self) {
 }
 
 PyMethodDef GLContext_methods[] = {
-    {"load", (PyCFunction)GLContext_meth_load, METH_O, NULL},
+    {"load_opengl_function", (PyCFunction)GLContext_meth_load, METH_O, NULL},
     {"release", (PyCFunction)GLContext_meth_release, METH_NOARGS, NULL},
     {"__enter__", (PyCFunction)GLContext_meth_enter, METH_NOARGS, NULL},
     {"__exit__", (PyCFunction)GLContext_meth_exit, METH_VARARGS, NULL},

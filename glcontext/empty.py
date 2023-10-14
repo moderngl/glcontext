@@ -2,7 +2,7 @@ class GLContext:
     def __init__(self):
         pass
 
-    def load(self):
+    def load_opengl_function(self, name):
         return 0
 
     def __enter__(self):
