@@ -1,8 +1,6 @@
-[![pypi](https://badge.fury.io/py/glcontext.svg)](https://pypi.python.org/pypi/glcontext)
+# glcontext
 
 <img align="right" width="300" height="200" src="https://github.com/moderngl/glcontext/raw/master/.github/icon.svg">
-
-# glcontext
 
 **glcontext** is a library providing OpenGL implementation for ModernGL on multiple platforms.
 
