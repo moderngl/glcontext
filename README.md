@@ -1,6 +1,6 @@
 # glcontext
 
-<img align="right" width="300" height="200" src="https://github.com/moderngl/glcontext/raw/master/.github/icon.svg">
+<img align="right" width="300" height="200" src="https://github.com/moderngl/glcontext/raw/main/.github/icon.svg">
 
 **glcontext** is a library providing OpenGL implementation for ModernGL on multiple platforms.
 
