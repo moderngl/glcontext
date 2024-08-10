@@ -1,5 +1,6 @@
 import platform
 import sys
+
 from setuptools import Extension, setup
 
 PLATFORMS = {'windows', 'linux', 'darwin'}
@@ -12,18 +13,6 @@ for known in PLATFORMS:
 
 if target not in PLATFORMS:
     target = 'linux'
-
-if target == 'darwin':
-    import os
-
-    if sys.version_info[:2] < (3, 12):
-        from distutils.sysconfig import get_config_var
-        from distutils.version import LooseVersion
-        if 'MACOSX_DEPLOYMENT_TARGET' not in os.environ:
-            current_system = LooseVersion(platform.mac_ver()[0])
-            python_target = LooseVersion(get_config_var('MACOSX_DEPLOYMENT_TARGET'))
-            if python_target < '10.9' and current_system >= '10.9':
-                os.environ['MACOSX_DEPLOYMENT_TARGET'] = '10.9'
 
 wgl = Extension(
     name='glcontext.wgl',
@@ -90,13 +79,13 @@ ext_modules = {
 
 setup(
     name='glcontext',
-    version='2.5.0',
-    description='Portable OpenGL Context',
+    version='3.0.0',
+    description='Portable Headless OpenGL Context',
     long_description=open('README.md', encoding='utf-8').read(),
     long_description_content_type='text/markdown',
     url='https://github.com/moderngl/glcontext',
     author='Szabolcs Dombi',
-    author_email='cprogrammer1994@gmail.com',
+    author_email='szabolcs@szabolcsdombi.com',
     license='MIT',
     platforms=['any'],
     packages=['glcontext'],
