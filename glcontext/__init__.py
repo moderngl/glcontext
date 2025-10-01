@@ -3,6 +3,36 @@ import os
 __version__ = '2.3.7'
 
 
+def get_default_backend_name():
+    """Get the default backend name based on the detected platform.
+
+    Returns:
+        str: The name of the default backend ('wgl', 'x11', or 'darwin')
+    """
+    PLATFORMS = {'windows', 'linux', 'darwin'}
+
+    import platform
+    target = platform.system().lower()
+
+    for known in PLATFORMS:
+        if target.startswith(known):
+            target = known
+
+    if target not in PLATFORMS:
+        target = 'linux'
+
+    if target == 'windows':
+        return 'wgl'
+
+    if target == 'linux':
+        return 'x11'
+
+    if target == 'darwin':
+        return 'darwin'
+
+    raise ValueError("Cannot find suitable default backend")
+
+
 def default_backend():
     """Get default backend based on the detected platform.
     Supports detecting an existing context and standalone contexts.
@@ -19,36 +49,25 @@ def default_backend():
     Returns:
         A backend object for creating and/or detecting context
     """
-    PLATFORMS = {'windows', 'linux', 'darwin'}
-
-    import platform
-    target = platform.system().lower()
-
-    for known in PLATFORMS:
-        if target.startswith(known):
-            target = known
-
-    if target not in PLATFORMS:
-        target = 'linux'
-
-    if target == 'windows':
-        return _wgl()
-
-    if target == 'linux':
-        return _x11()
-
-    if target == 'darwin':
-        return _darwin()
-
-    raise ValueError("Cannot find suitable default backend")
+    return get_backend_by_name(get_default_backend_name())
 
 
 def get_backend_by_name(name: str):
     """Request a specific backend by name"""
-    if name == 'egl':
-        return _egl()
+    BACKENDS = {
+        'wgl': _wgl,
+        'x11': _x11,
+        'darwin': _darwin,
+        'egl': _egl,
+    }
 
-    raise ValueError("Cannot find supported backend: '{}'".format(name))
+    backend = BACKENDS.get(name)
+    if backend:
+        return backend()
+
+    raise ValueError("Cannot find supported backend: '{}'. Supported backends: {}".format(
+        name, ', '.join(BACKENDS.keys())
+    ))
 
 
 def _wgl():
