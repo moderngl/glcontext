@@ -88,12 +88,25 @@ struct GLContext {
 
 PyTypeObject * GLContext_type;
 
+static void *try_dlopen(const char **names) {
+    void *lib;
+
+    for (const char **name = names; *name != NULL; name++) {
+        if ((lib = dlopen(*name, RTLD_LAZY)) != NULL) {
+            return lib;
+        }
+    }
+    return NULL;
+}
+
 GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwargs) {
     static const char * keywords[] = {"mode", "libgl", "libx11", "glversion", NULL};
 
     const char * mode = "detect";
-    const char * libgl = "libGL.so";
-    const char * libx11 = "libX11.so";
+    const char * libgl = NULL;
+    const char * libgl_names[] = {"libGL.so", "libGL.so.1", NULL};
+    const char * libx11 = NULL;
+    const char * libx11_names[] = {"libX11.so", "libX11.so.6", NULL};
     int glversion = 330;
 
     if (!PyArg_ParseTupleAndKeywords(args, kwargs, "|sssi", keywords, &mode, &libgl, &libx11, &glversion)) {
@@ -102,10 +115,18 @@ GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwa
 
     GLContext * res = PyObject_New(GLContext, GLContext_type);
 
-    res->libgl = dlopen(libgl, RTLD_LAZY);
-    if (!res->libgl) {
-        PyErr_Format(PyExc_Exception, "%s not found in /lib, /usr/lib or LD_LIBRARY_PATH", libgl);
-        return NULL;
+    if (libgl) {
+        res->libgl = dlopen(libgl, RTLD_LAZY);
+        if (!res->libgl) {
+            PyErr_Format(PyExc_Exception, "%s not found by dynamic linker.  Check with 'ldconfig -v'.", libgl);
+            return NULL;
+        }
+    } else {
+        res->libgl = try_dlopen(libgl_names);
+        if (!res->libgl) {
+            PyErr_Format(PyExc_Exception, "%s not found by dynamic linker.  Check with 'ldconfig -v'.", libgl_names[0]);
+            return NULL;
+        }
     }
 
     res->m_glXChooseFBConfig = (m_glXChooseFBConfigProc)dlsym(res->libgl, "glXChooseFBConfig");
@@ -163,10 +184,18 @@ GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwa
     }
 
     if (strcmp(mode, "detect")) {
-        res->libx11 = dlopen(libx11, RTLD_LAZY);
-        if (!res->libx11) {
-            PyErr_Format(PyExc_Exception, "(detect) %s not loaded", libx11);
-            return NULL;
+        if (libx11) {
+            res->libx11 = dlopen(libx11, RTLD_LAZY);
+            if (!res->libx11) {
+                PyErr_Format(PyExc_Exception, "(detect) %s not found by dynamic linker.  Check with 'ldconfig -v'.", libx11);
+                return NULL;
+            }
+        } else {
+            res->libx11 = try_dlopen(libx11_names);
+            if (!res->libx11) {
+                PyErr_Format(PyExc_Exception, "(detect) %s not found by dynamic linker.  Check with 'ldconfig -v'.", libx11_names[0]);
+                return NULL;
+            }
         }
 
         res->m_XOpenDisplay = (m_XOpenDisplayProc)dlsym(res->libx11, "XOpenDisplay");

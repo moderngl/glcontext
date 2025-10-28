@@ -91,12 +91,25 @@ struct GLContext {
 
 PyTypeObject * GLContext_type;
 
+static void *try_dlopen(const char **names) {
+    void *lib;
+
+    for (const char **name = names; *name != NULL; name++) {
+        if ((lib = dlopen(*name, RTLD_LAZY)) != NULL) {
+            return lib;
+        }
+    }
+    return NULL;
+}
+
 GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwargs) {
     static const char * keywords[] = {"mode", "libgl", "libegl", "glversion", "device_index", NULL};
 
     const char * mode = "standalone";
-    const char * libgl = "libGL.so";
-    const char * libegl = "libEGL.so";
+    const char * libgl = NULL;
+    const char * libgl_names[] = {"libGL.so", "libGL.so.1", NULL};
+    const char * libegl = NULL;
+    const char * libegl_names[] = {"libEGL.so", "libEGL.so.1", NULL};
     int glversion = 330;
     int device_index = 0;
 
@@ -106,16 +119,32 @@ GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwa
 
     GLContext * res = PyObject_New(GLContext, GLContext_type);
 
-    res->libgl = dlopen(libgl, RTLD_LAZY);
-    if (!res->libgl) {
-        PyErr_Format(PyExc_Exception, "%s not loaded", libgl);
-        return NULL;
+    if (libgl) {
+        res->libgl = dlopen(libgl, RTLD_LAZY);
+        if (!res->libgl) {
+            PyErr_Format(PyExc_Exception, "%s not found by dynamic linker.  Check with 'ldconfig -v'.", libgl);
+            return NULL;
+        }
+    } else {
+        res->libgl = try_dlopen(libgl_names);
+        if (!res->libgl) {
+            PyErr_Format(PyExc_Exception, "%s not found by dynamic linker.  Check with 'ldconfig -v'.", libgl_names[0]);
+            return NULL;
+        }
     }
 
-    res->libegl = dlopen(libegl, RTLD_LAZY);
-    if (!res->libegl) {
-        PyErr_Format(PyExc_Exception, "%s not loaded", libegl);
-        return NULL;
+    if (libegl) {
+        res->libegl = dlopen(libegl, RTLD_LAZY);
+        if (!res->libegl) {
+            PyErr_Format(PyExc_Exception, "%s not found by dynamic linker.  Check with 'ldconfig -v'.", libegl);
+            return NULL;
+        }
+    } else {
+        res->libegl = try_dlopen(libegl_names);
+        if (!res->libegl) {
+            PyErr_Format(PyExc_Exception, "%s not found by dynamic linker.  Check with 'ldconfig -v'.", libegl_names[0]);
+            return NULL;
+        }
     }
 
     res->m_eglGetError = (m_eglGetErrorProc)dlsym(res->libegl, "eglGetError");
