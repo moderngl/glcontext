@@ -1,6 +1,7 @@
 #include <Python.h>
 #include <structmember.h>
 
+#include <stdlib.h>
 #include <dlfcn.h>
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
@@ -88,7 +89,7 @@ struct GLContext {
 PyTypeObject * GLContext_type;
 
 GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwargs) {
-    static char * keywords[] = {"mode", "libgl", "libx11", "glversion", NULL};
+    static const char * keywords[] = {"mode", "libgl", "libx11", "glversion", NULL};
 
     const char * mode = "detect";
     const char * libgl = "libGL.so";

@@ -1,6 +1,7 @@
 #include <Python.h>
 #include <structmember.h>
 
+#include <stdlib.h>
 #include <dlfcn.h>
 
 struct Display;
@@ -91,7 +92,7 @@ struct GLContext {
 PyTypeObject * GLContext_type;
 
 GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwargs) {
-    static char * keywords[] = {"mode", "libgl", "libegl", "glversion", "device_index", NULL};
+    static const char * keywords[] = {"mode", "libgl", "libegl", "glversion", "device_index", NULL};
 
     const char * mode = "standalone";
     const char * libgl = "libGL.so";
