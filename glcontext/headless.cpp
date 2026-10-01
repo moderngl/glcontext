@@ -1,5 +1,7 @@
 #include <Python.h>
 
+#include "freethreading.hpp"
+
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
 
@@ -11,6 +13,9 @@ EGLDisplay display;
 EGLConfig config;
 
 PyObject * meth_devices(PyObject * self) {
+    // devices, num_devices, display, config and context are module level state
+    ObjectLock lock(self);
+
     PFNEGLQUERYDEVICESEXTPROC eglQueryDevicesEXT = (PFNEGLQUERYDEVICESEXTPROC)eglGetProcAddress("eglQueryDevicesEXT");
     PFNEGLQUERYDEVICESTRINGEXTPROC eglQueryDeviceStringEXT = (PFNEGLQUERYDEVICESTRINGEXTPROC)eglGetProcAddress("eglQueryDeviceStringEXT");
 
@@ -41,6 +46,8 @@ PyObject * meth_init(PyObject * self, PyObject * args, PyObject * kwargs) {
     if (!PyArg_ParseTupleAndKeywords(args, kwargs, "i", (char **)keywords, &device)) {
         return NULL;
     }
+
+    ObjectLock lock(self);
 
     if (device > num_devices) {
         return NULL;
@@ -103,5 +110,11 @@ PyModuleDef module_def = {PyModuleDef_HEAD_INIT, "headless", NULL, -1, module_me
 
 extern "C" PyObject * PyInit_headless() {
     PyObject * module = PyModule_Create(&module_def);
+#ifdef Py_GIL_DISABLED
+    if (!module || PyUnstable_Module_SetGIL(module, Py_MOD_GIL_NOT_USED) < 0) {
+        Py_XDECREF(module);
+        return NULL;
+    }
+#endif
     return module;
 }
