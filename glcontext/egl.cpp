@@ -1,6 +1,8 @@
 #include <Python.h>
 #include <structmember.h>
 
+#include "freethreading.hpp"
+
 #include <dlfcn.h>
 
 struct Display;
@@ -350,7 +352,10 @@ PyObject * GLContext_meth_load(GLContext * self, PyObject * arg) {
 }
 
 PyObject * GLContext_meth_enter(GLContext * self) {
-    self->m_eglMakeCurrent(self->dpy, self->wnd, self->wnd, self->ctx);
+    ObjectLock lock((PyObject *)self);
+    if (self->ctx) {
+        self->m_eglMakeCurrent(self->dpy, self->wnd, self->wnd, self->ctx);
+    }
     Py_RETURN_NONE;
 }
 
@@ -360,7 +365,11 @@ PyObject * GLContext_meth_exit(GLContext * self) {
 }
 
 PyObject * GLContext_meth_release(GLContext * self) {
-    self->m_eglDestroyContext(self->dpy, self->ctx);
+    ObjectLock lock((PyObject *)self);
+    if (self->ctx) {
+        self->m_eglDestroyContext(self->dpy, self->ctx);
+        self->ctx = NULL;
+    }
     Py_RETURN_NONE;
 }
 
@@ -400,6 +409,12 @@ PyModuleDef module_def = {PyModuleDef_HEAD_INIT, "egl", NULL, -1, module_methods
 
 extern "C" PyObject * PyInit_egl() {
     PyObject * module = PyModule_Create(&module_def);
+#ifdef Py_GIL_DISABLED
+    if (!module || PyUnstable_Module_SetGIL(module, Py_MOD_GIL_NOT_USED) < 0) {
+        Py_XDECREF(module);
+        return NULL;
+    }
+#endif
     GLContext_type = (PyTypeObject *)PyType_FromSpec(&GLContext_spec);
     PyModule_AddObject(module, "GLContext", (PyObject *)GLContext_type);
     return module;

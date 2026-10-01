@@ -72,5 +72,11 @@ PyModuleDef module_def = {PyModuleDef_HEAD_INIT, "windowed", NULL, -1, module_me
 
 extern "C" PyObject * PyInit_windowed() {
     PyObject * module = PyModule_Create(&module_def);
+#ifdef Py_GIL_DISABLED
+    if (!module || PyUnstable_Module_SetGIL(module, Py_MOD_GIL_NOT_USED) < 0) {
+        Py_XDECREF(module);
+        return NULL;
+    }
+#endif
     return module;
 }
