@@ -141,22 +141,36 @@ PyObject * GLContext_meth_exit(GLContext * self) {
     Py_RETURN_NONE;
 }
 
-PyObject * GLContext_meth_release(GLContext * self) {
-    ObjectLock lock((PyObject *)self);
+// Destroys the context if the object owns it, it is safe to call more than once.
+// from_dealloc is set when the last reference was dropped, that can happen on any thread
+// and that thread may have an unrelated context current, so only unbind our own context there.
+static void GLContext_release_native(GLContext * self, bool from_dealloc) {
     if (self->standalone && self->ctx) {
         if (self->old_context == (void *)self->ctx) {
             // entered while current, __exit__ would restore the context destroyed here
             self->old_context = NULL;
         }
-        CGLSetCurrentContext(NULL);
+        if (!from_dealloc || CGLGetCurrentContext() == self->ctx) {
+            CGLSetCurrentContext(NULL);
+        }
         CGLDestroyContext(self->ctx);
         self->ctx = NULL;
     }
+}
+
+PyObject * GLContext_meth_release(GLContext * self) {
+    ObjectLock lock((PyObject *)self);
+    GLContext_release_native(self, false);
     Py_RETURN_NONE;
 }
 
 void GLContext_dealloc(GLContext * self) {
-    Py_TYPE(self)->tp_free(self);
+    // Contexts that were never released would leak the native context.
+    // Nothing else references the object, so there is nothing to lock.
+    GLContext_release_native(self, true);
+    PyTypeObject * type = Py_TYPE(self);
+    type->tp_free(self);
+    Py_DECREF(type); // the instance owns a reference to its heap type
 }
 
 PyMethodDef GLContext_methods[] = {
