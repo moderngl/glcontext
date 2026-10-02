@@ -150,8 +150,9 @@ class Stub:
         if result.returncode:
             skip('cannot build the stub library: %s' % result.stdout)
         self.lib = ctypes.CDLL(self.path)
-        for name in ('stub_get_glx_current', 'stub_get_egl_current', 'stub_get_x_handler'):
+        for name in ('stub_get_glx_current', 'stub_get_egl_current', 'stub_get_x_handler', 'XSetErrorHandler'):
             getattr(self.lib, name).restype = ctypes.c_void_p
+        self.lib.XSetErrorHandler.argtypes = [ctypes.c_void_p]
         for name in ('stub_set_glx_current', 'stub_set_egl_current'):
             getattr(self.lib, name).argtypes = [ctypes.c_void_p]
 
@@ -382,6 +383,49 @@ def scenario_x11_handler_restored_after_failure():
     stub.cleanup()
 
 
+def scenario_x11_handler_of_the_application_is_kept():
+    """The handler was reset to the Xlib default, not to the one that was installed before."""
+    stub = Stub()
+    stub.lib.XSetErrorHandler(0x1234)  # the application installs its own handler
+    for mode in ('standalone', 'share'):
+        stub.lib.stub_set_glx_current(0xbeef)
+        ctx = stub.x11_context(mode=mode)
+        assert stub.lib.stub_get_x_handler() == 0x1234, 'the handler of the application is gone after creating'
+        ctx.release()
+    for mode, switches, kwargs in X11_FAILURES:
+        x11_failing_create(stub, mode, switches, kwargs)
+        assert stub.lib.stub_get_x_handler() == 0x1234, \
+            'the handler of the application is gone after %s %s %s' % (mode, switches, kwargs)
+    stub.cleanup()
+
+
+def scenario_x11_handler_of_the_application_is_kept_real():
+    """The same with libX11, creating a context must not take over the error handling of the application."""
+    from ctypes.util import find_library
+    if not os.environ.get('DISPLAY'):
+        skip('no display')
+    libx11 = ctypes.CDLL(find_library('X11'))
+    libx11.XSetErrorHandler.restype = ctypes.c_void_p
+    libx11.XSetErrorHandler.argtypes = [ctypes.c_void_p]
+    backend = backend_for('x11')
+
+    @ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_void_p, ctypes.c_void_p)
+    def handler(display, event):
+        return 0
+
+    address = ctypes.cast(handler, ctypes.c_void_p).value
+    libx11.XSetErrorHandler(address)
+    ctx = backend(mode='standalone', glversion=330)
+    assert libx11.XSetErrorHandler(address) == address, 'the handler is gone after creating a context'
+    ctx.release()
+    try:
+        backend(mode='standalone', glversion=999)  # there is no OpenGL 9.9
+    except Exception:
+        assert libx11.XSetErrorHandler(address) == address, 'the handler is gone after a failed create'
+    else:
+        skip('creating an OpenGL 9.9 context did not fail')
+
+
 def scenario_x11_handler_restored_after_failure_real():
     """The same with libX11, an application that sets its own error handler would crash on the next X error."""
     from ctypes.util import find_library
@@ -446,6 +490,8 @@ SCENARIOS = {
     'x11_dealloc_real': scenario_x11_dealloc_real,
     'x11_handler_restored_after_failure': scenario_x11_handler_restored_after_failure,
     'x11_handler_restored_after_failure_real': scenario_x11_handler_restored_after_failure_real,
+    'x11_handler_of_the_application_is_kept': scenario_x11_handler_of_the_application_is_kept,
+    'x11_handler_of_the_application_is_kept_real': scenario_x11_handler_of_the_application_is_kept_real,
     'egl_dealloc_releases': scenario_egl_dealloc_releases,
     'egl_dealloc_unrelated_context': scenario_egl_dealloc_unrelated_context,
     'egl_type_refcount': scenario_egl_type_refcount,
@@ -503,6 +549,14 @@ class ErrorPathsTestCase(TestCase):
     @pytest.mark.skipif(not LINUX, reason='requires x11')
     def test_x11_handler_restored_after_failure_real(self):
         run_scenario('x11_handler_restored_after_failure_real')
+
+    @pytest.mark.skipif(not LINUX, reason='requires x11')
+    def test_x11_handler_of_the_application_is_kept(self):
+        run_scenario('x11_handler_of_the_application_is_kept')
+
+    @pytest.mark.skipif(not LINUX, reason='requires x11')
+    def test_x11_handler_of_the_application_is_kept_real(self):
+        run_scenario('x11_handler_of_the_application_is_kept_real')
 
     @pytest.mark.skipif(not LINUX, reason='requires x11')
     def test_x11_exit_with_live_contexts(self):

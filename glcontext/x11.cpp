@@ -48,20 +48,22 @@ int SilentXErrorHandler(Display * d, XErrorEvent * e) {
     return 0;
 }
 
-// Installs the SilentXErrorHandler and puts the default handler back when it goes out of scope,
+// Installs the SilentXErrorHandler and puts the previous handler back when it goes out of scope,
 // so every way out of the context creation restores it. restore() does it earlier.
+// The previous handler may be one of the application, passing NULL would install the Xlib default.
 struct SilentXErrors {
     m_XSetErrorHandlerProc set_handler;
+    XErrorHandler previous;
     bool active;
 
     SilentXErrors(m_XSetErrorHandlerProc set_handler) : set_handler(set_handler), active(true) {
-        set_handler(SilentXErrorHandler);
+        previous = set_handler(SilentXErrorHandler);
     }
 
     void restore() {
         if (active) {
             active = false;
-            set_handler(NULL);
+            set_handler(previous);
         }
     }
 
