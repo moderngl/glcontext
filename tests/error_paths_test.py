@@ -426,6 +426,35 @@ def scenario_x11_handler_of_the_application_is_kept_real():
         skip('creating an OpenGL 9.9 context did not fail')
 
 
+def scenario_x11_share_failure_keeps_display():
+    """The share mode uses the display of the current context, it belongs to the application and must stay open."""
+    stub = Stub()
+    for switch in ('fail_choose_fbconfig', 'fail_choose_visual'):
+        stub.lib.stub_set_glx_current(0xbeef)
+        setattr(stub, switch, 1)
+        try:
+            stub.x11_context(mode='share')
+        except Exception:
+            pass
+        else:
+            raise AssertionError('creating the context did not fail with %s' % switch)
+        finally:
+            setattr(stub, switch, 0)
+        assert stub.n_x_close == 0, 'closed the display of the application (%s)' % switch
+
+    # the display that the standalone mode opened itself is closed on the same errors
+    for switch in ('fail_choose_fbconfig', 'fail_choose_visual'):
+        setattr(stub, switch, 1)
+        try:
+            stub.x11_context(mode='standalone')
+        except Exception:
+            pass
+        finally:
+            setattr(stub, switch, 0)
+    assert stub.n_x_open == 2 and stub.n_x_close == 2
+    stub.cleanup()
+
+
 def scenario_x11_handler_restored_after_failure_real():
     """The same with libX11, an application that sets its own error handler would crash on the next X error."""
     from ctypes.util import find_library
@@ -489,6 +518,7 @@ SCENARIOS = {
     'x11_type_refcount': scenario_x11_type_refcount,
     'x11_dealloc_real': scenario_x11_dealloc_real,
     'x11_handler_restored_after_failure': scenario_x11_handler_restored_after_failure,
+    'x11_share_failure_keeps_display': scenario_x11_share_failure_keeps_display,
     'x11_handler_restored_after_failure_real': scenario_x11_handler_restored_after_failure_real,
     'x11_handler_of_the_application_is_kept': scenario_x11_handler_of_the_application_is_kept,
     'x11_handler_of_the_application_is_kept_real': scenario_x11_handler_of_the_application_is_kept_real,
@@ -557,6 +587,10 @@ class ErrorPathsTestCase(TestCase):
     @pytest.mark.skipif(not LINUX, reason='requires x11')
     def test_x11_handler_of_the_application_is_kept_real(self):
         run_scenario('x11_handler_of_the_application_is_kept_real')
+
+    @pytest.mark.skipif(not LINUX, reason='requires x11')
+    def test_x11_share_failure_keeps_display(self):
+        run_scenario('x11_share_failure_keeps_display')
 
     @pytest.mark.skipif(not LINUX, reason='requires x11')
     def test_x11_exit_with_live_contexts(self):

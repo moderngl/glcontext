@@ -320,7 +320,6 @@ GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwa
         res->fbc = res->m_glXChooseFBConfig(res->dpy, res->m_XDefaultScreen(res->dpy), 0, &nelements);
 
         if (!res->fbc) {
-            res->m_XCloseDisplay(res->dpy);
             PyErr_Format(PyExc_Exception, "(share) glXChooseFBConfig failed");
             return NULL;
         }
@@ -338,7 +337,6 @@ GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwa
         res->vi = res->m_glXChooseVisual(res->dpy, res->m_XDefaultScreen(res->dpy), attribute_list);
 
         if (!res->vi) {
-            res->m_XCloseDisplay(res->dpy);
             PyErr_Format(PyExc_Exception, "(share) glXChooseVisual:  cannot choose visual");
             return NULL;
         }
