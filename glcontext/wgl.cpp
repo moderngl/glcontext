@@ -268,6 +268,9 @@ GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwa
 
 PyObject * GLContext_meth_load(GLContext * self, PyObject * arg) {
     const char * name = PyUnicode_AsUTF8(arg);
+    if (!name) {
+        return NULL;
+    }
     void * proc = (void *)GetProcAddress(self->libgl, name);
     if (!proc) {
         proc = (void *)self->m_wglGetProcAddress(name);

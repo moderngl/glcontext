@@ -461,6 +461,9 @@ GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwa
 
 PyObject * GLContext_meth_load(GLContext * self, PyObject * arg) {
     const char * method = PyUnicode_AsUTF8(arg);
+    if (!method) {
+        return NULL;
+    }
     void * proc = (void *)dlsym(self->libgl, method);
     if (!proc) {
         proc = (void *)self->m_glXGetProcAddress((const unsigned char *)method);

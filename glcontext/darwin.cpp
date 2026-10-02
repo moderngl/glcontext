@@ -105,14 +105,24 @@ GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwa
 
 PyObject * GLContext_meth_load(GLContext * self, PyObject * arg) {
     PyObject * prefix = PyUnicode_FromString("_");
+    if (!prefix) {
+        return NULL;
+    }
     PyObject * prefixed = PyNumber_Add(prefix, arg);
+    Py_DECREF(prefix);
+    if (!prefixed) {
+        return NULL;
+    }
     NSSymbol symbol = NULL;
     const char * method = PyUnicode_AsUTF8(prefixed);
+    if (!method) {
+        Py_DECREF(prefixed);
+        return NULL;
+    }
     if (NSIsSymbolNameDefined(method)) {
         symbol = NSLookupAndBindSymbol(method);
     }
     Py_DECREF(prefixed);
-    Py_DECREF(prefix);
     return PyLong_FromVoidPtr(symbol ? NSAddressOfSymbol(symbol) : NULL);
 }
 
