@@ -126,6 +126,42 @@ struct GLContext {
 
 PyTypeObject * GLContext_type;
 
+static void GLContext_release_native(GLContext * self, bool from_dealloc);
+
+// Cleans up when creating a context fails: whatever was created so far is released and the
+// half built object is dropped. Every error return of meth_create_context goes through here
+// unless it hands the object out with done(). Declared first in the function so it runs last,
+// after the X11Lock and the error handler guard, the release takes the lock itself.
+// The libraries are only closed here: the application may have been given function pointers
+// of a context that was created successfully, so release() and the deallocation keep them loaded.
+struct CreateGuard {
+    GLContext * res;
+
+    CreateGuard(GLContext * res) : res(res) {}
+
+    GLContext * done() {
+        GLContext * created = res;
+        res = NULL;
+        return created;
+    }
+
+    ~CreateGuard() {
+        if (!res) {
+            return;
+        }
+        GLContext_release_native(res, true);
+        if (res->libx11) {
+            dlclose(res->libx11);
+            res->libx11 = NULL;
+        }
+        if (res->libgl) {
+            dlclose(res->libgl);
+            res->libgl = NULL;
+        }
+        Py_DECREF(res);
+    }
+};
+
 GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwargs) {
     static char * keywords[] = {"mode", "libgl", "libx11", "glversion", NULL};
 
@@ -142,6 +178,8 @@ GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwa
     if (!res) {
         return NULL;
     }
+
+    CreateGuard guard(res);
 
     res->libgl = dlopen(libgl, RTLD_LAZY);
     if (!res->libgl) {
@@ -289,7 +327,7 @@ GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwa
 
         res->fbc = NULL;
         res->vi = NULL;
-        return res;
+        return guard.done();
     }
 
     if (!strcmp(mode, "share")) {
@@ -375,7 +413,7 @@ GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwa
             return NULL;
         }
 
-        return res;
+        return guard.done();
     }
 
     if (!strcmp(mode, "standalone")) {
@@ -399,7 +437,6 @@ GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwa
         res->fbc = res->m_glXChooseFBConfig(res->dpy, res->m_XDefaultScreen(res->dpy), 0, &nelements);
 
         if (!res->fbc) {
-            res->m_XCloseDisplay(res->dpy);
             PyErr_Format(PyExc_Exception, "(standalone) glXChooseFBConfig failed");
             return NULL;
         }
@@ -417,7 +454,6 @@ GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwa
         res->vi = res->m_glXChooseVisual(res->dpy, res->m_XDefaultScreen(res->dpy), attribute_list);
 
         if (!res->vi) {
-            res->m_XCloseDisplay(res->dpy);
             PyErr_Format(PyExc_Exception, "(standalone) glXChooseVisual: cannot choose visual");
             return NULL;
         }
@@ -433,7 +469,6 @@ GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwa
         );
 
         if (!res->wnd) {
-            res->m_XCloseDisplay(res->dpy);
             PyErr_Format(PyExc_Exception, "(standalone) XCreateWindow: cannot create window");
             return NULL;
         }
@@ -472,7 +507,7 @@ GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwa
             return NULL;
         }
 
-        return res;
+        return guard.done();
     }
 
     PyErr_Format(PyExc_Exception, "unknown mode");
@@ -508,7 +543,8 @@ PyObject * GLContext_meth_exit(GLContext * self) {
     Py_RETURN_NONE;
 }
 
-// Destroys everything the object owns, it is safe to call more than once.
+// Destroys everything the object owns, it is safe to call more than once and with the partial
+// state of a context that could not be created: every handle is checked before it is released.
 // from_dealloc is set when the last reference was dropped, that can happen on any thread
 // and that thread may have an unrelated context current, so only unbind our own context there.
 static void GLContext_release_native(GLContext * self, bool from_dealloc) {
@@ -527,10 +563,16 @@ static void GLContext_release_native(GLContext * self, bool from_dealloc) {
         self->ctx = NULL;
     }
     if (self->own_window) {
-        self->m_XDestroyWindow(self->dpy, self->wnd);
-        self->m_XCloseDisplay(self->dpy);
+        // the display and the window are not there yet when creating the context failed early
+        if (self->dpy) {
+            if (self->wnd) {
+                self->m_XDestroyWindow(self->dpy, self->wnd);
+            }
+            self->m_XCloseDisplay(self->dpy);
+        }
         self->own_window = false;
         self->dpy = NULL;
+        self->wnd = 0;
     }
     if (self->fbc) {
         self->m_XFree(self->fbc);

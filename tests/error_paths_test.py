@@ -4,6 +4,8 @@ Every scenario runs in its own interpreter: a crash in the native code fails one
 instead of killing the pytest process. The scenarios are plain functions in this file,
 run by ``python error_paths_test.py <scenario>``.
 """
+import _ctypes
+import atexit
 import ctypes
 import gc
 import os
@@ -31,6 +33,8 @@ int n_glx_create, n_glx_destroy, n_glx_bind, n_glx_unbind, n_glx_unbind_other;
 int n_x_open, n_x_close, n_x_destroy_window, n_x_free;
 int n_egl_create, n_egl_destroy, n_egl_bind, n_egl_unbind;
 int fail_choose_fbconfig, fail_choose_visual, fail_create_context, fail_no_arb;
+int fail_open_display, fail_create_window, fail_make_current;
+int fail_egl_query_devices, fail_egl_display, fail_egl_initialize, fail_egl_choose_config, fail_egl_bind_api;
 
 static __thread ptr glx_current;
 static __thread ptr glx_unbound;  // what the last glXMakeCurrent(NULL) of this thread unbound
@@ -48,11 +52,11 @@ static struct visual_info visual_info = {0, 1, 0, 24};
 static ptr fbconfigs[2] = {(ptr)1, 0};
 
 // libX11
-ptr XOpenDisplay(const char * name) { return (ptr)(0x100000 + 0x1000 * ++n_x_open); }
+ptr XOpenDisplay(const char * name) { return fail_open_display ? 0 : (ptr)(0x100000 + 0x1000 * ++n_x_open); }
 int XDefaultScreen(ptr dpy) { return 0; }
 unsigned long XRootWindow(ptr dpy, int screen) { return 1; }
 unsigned long XCreateColormap(ptr dpy, unsigned long wnd, ptr visual, int alloc) { return 1; }
-unsigned long XCreateWindow() { return 42; }
+unsigned long XCreateWindow() { return fail_create_window ? 0 : 42; }
 int XDestroyWindow(ptr dpy, unsigned long wnd) { n_x_destroy_window++; return 1; }
 int XCloseDisplay(ptr dpy) { n_x_close++; return 0; }
 int XFree(ptr data) { n_x_free++; return 1; }
@@ -69,6 +73,7 @@ ptr glXGetCurrentDisplay(void) { return (ptr)0xd15; }
 ptr glXGetCurrentContext(void) { return glx_current; }
 unsigned long glXGetCurrentDrawable(void) { return 42; }
 int glXMakeCurrent(ptr dpy, unsigned long drawable, ptr ctx) {
+    if (ctx && fail_make_current) return 0;
     ctx ? n_glx_bind++ : n_glx_unbind++;
     glx_unbound = ctx ? 0 : glx_current;
     glx_current = ctx;
@@ -98,9 +103,11 @@ ptr glXGetProcAddress(const unsigned char * name) {
 // libEGL
 int eglGetError(void) { return 0x3000; }
 ptr eglGetDisplay(ptr native) { return (ptr)1; }
-unsigned eglInitialize(ptr dpy, int * major, int * minor) { return 1; }
-unsigned eglChooseConfig(ptr dpy, const int * attribs, ptr * configs, int size, int * n) { configs[0] = (ptr)1; *n = 1; return 1; }
-unsigned eglBindAPI(unsigned api) { return 1; }
+unsigned eglInitialize(ptr dpy, int * major, int * minor) { return !fail_egl_initialize; }
+unsigned eglChooseConfig(ptr dpy, const int * attribs, ptr * configs, int size, int * n) {
+    configs[0] = (ptr)1; *n = 1; return !fail_egl_choose_config;
+}
+unsigned eglBindAPI(unsigned api) { return !fail_egl_bind_api; }
 ptr eglCreateContext(ptr dpy, ptr config, ptr share, const int * attribs) {
     return fail_create_context ? 0 : (ptr)(0x300000 + 0x10 * ++n_egl_create);
 }
@@ -110,8 +117,10 @@ unsigned eglMakeCurrent(ptr dpy, ptr draw, ptr read, ptr ctx) {
     egl_current = ctx;
     return 1;
 }
-unsigned eglQueryDevicesEXT(int max, ptr * devices, int * n) { if (devices) devices[0] = (ptr)1; *n = 1; return 1; }
-ptr eglGetPlatformDisplayEXT(unsigned platform, ptr native, const int * attribs) { return (ptr)1; }
+unsigned eglQueryDevicesEXT(int max, ptr * devices, int * n) {
+    if (devices) devices[0] = (ptr)1; *n = 1; return !fail_egl_query_devices;
+}
+ptr eglGetPlatformDisplayEXT(unsigned platform, ptr native, const int * attribs) { return fail_egl_display ? 0 : (ptr)1; }
 ptr eglGetCurrentDisplay(void) { return (ptr)1; }
 ptr eglGetCurrentContext(void) { return egl_current; }
 ptr eglGetCurrentSurface(int which) { return (ptr)1; }
@@ -133,23 +142,80 @@ def skip(reason):
     sys.exit(SKIP)
 
 
+def build_library(source, name):
+    """Compiles a shared library, returns its path. The result is skipped if this is not possible."""
+    compiler = shutil.which('cc') or shutil.which('gcc')
+    if not LINUX or not compiler:
+        skip('needs a C compiler on Linux to build the stub library')
+    tmp = tempfile.mkdtemp()
+    atexit.register(shutil.rmtree, tmp, ignore_errors=True)
+    path = os.path.join(tmp, name)
+    with open(os.path.join(tmp, 'source.c'), 'w') as f:
+        f.write(source)
+    result = subprocess.run([compiler, '-shared', '-fPIC', '-o', path, os.path.join(tmp, 'source.c')],
+                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
+    if result.returncode:
+        skip('cannot build the stub library: %s' % result.stdout)
+    return path
+
+
+def is_mapped(path):
+    path = os.path.realpath(path)
+    with open('/proc/self/maps') as f:
+        return any(path in line for line in f)
+
+
+class Library:
+    """A shared library that the test holds one reference to, to tell if the modules closed theirs.
+
+    A library is unmapped when the last dlclose() balances the last dlopen(). The test keeps a
+    reference of its own, so a module that closes too often unmaps the library under the feet of
+    the test, and one that does not close enough leaves it mapped after the test dropped its own.
+    """
+
+    def __init__(self, path):
+        self.path = path
+        self.lib = ctypes.CDLL(path)
+
+    def closed_by_modules(self):
+        assert is_mapped(self.path), 'a module closed the library more often than it opened it'
+        _ctypes.dlclose(self.lib._handle)
+        return not is_mapped(self.path)
+
+
+# a library without any of the functions the modules look for
+EMPTY_SOURCE = 'int nothing_to_see_here;'
+
+
+_built = {}
+
+
+def build_library_cached(source, name):
+    if name not in _built:
+        _built[name] = build_library(source, name)
+    return _built[name]
+
+
+def copy_of(path):
+    """A library of its own that is not loaded yet, counters and mappings are per path."""
+    copy = os.path.join(tempfile.mkdtemp(), os.path.basename(path))
+    atexit.register(shutil.rmtree, os.path.dirname(copy), ignore_errors=True)
+    shutil.copy(path, copy)
+    return copy
+
+
 class Stub:
-    """The compiled stub library, the counters are read and the switches are set as attributes."""
+    """The compiled stub library, the counters are read and the switches are set as attributes.
+
+    Every instance is a copy of its own, so the counters start at zero and the library can be
+    checked for being closed by the modules (see Library).
+    """
 
     def __init__(self):
-        compiler = shutil.which('cc') or shutil.which('gcc')
-        if not LINUX or not compiler:
-            skip('needs a C compiler on Linux to build the stub library')
-        self.tmp = tempfile.mkdtemp()
-        source = os.path.join(self.tmp, 'stub.c')
-        self.path = os.path.join(self.tmp, 'libstub.so')
-        with open(source, 'w') as f:
-            f.write(STUB_SOURCE)
-        result = subprocess.run([compiler, '-shared', '-fPIC', '-o', self.path, source],
-                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
-        if result.returncode:
-            skip('cannot build the stub library: %s' % result.stdout)
-        self.lib = ctypes.CDLL(self.path)
+        self.path = copy_of(build_library_cached(STUB_SOURCE, 'libstub.so'))
+        self.tmp = os.path.dirname(self.path)
+        self.library = Library(self.path)
+        self.lib = self.library.lib
         for name in ('stub_get_glx_current', 'stub_get_egl_current', 'stub_get_x_handler', 'XSetErrorHandler'):
             getattr(self.lib, name).restype = ctypes.c_void_p
         self.lib.XSetErrorHandler.argtypes = [ctypes.c_void_p]
@@ -169,11 +235,13 @@ class Stub:
 
     def x11_context(self, **kwargs):
         from glcontext import x11
-        return x11.create_context(libgl=self.path, libx11=self.path, **kwargs)
+        kwargs = dict({'libgl': self.path, 'libx11': self.path}, **kwargs)
+        return x11.create_context(**kwargs)
 
     def egl_context(self, **kwargs):
         from glcontext import egl
-        return egl.create_context(libgl=self.path, libegl=self.path, **kwargs)
+        kwargs = dict({'libgl': self.path, 'libegl': self.path}, **kwargs)
+        return egl.create_context(**kwargs)
 
     def cleanup(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
@@ -503,6 +571,216 @@ def scenario_egl_dealloc_real():
     assert rss_kb() < before + 50 * 1024, 'memory grew by %d MB' % ((rss_kb() - before) // 1024)
 
 
+class Failure:
+    """One way creating a context fails, and what is left to clean up when it does."""
+
+    def __init__(self, name, mode, message, switches=None, kwargs=None, libs=None, current=False, **counters):
+        self.name = name
+        self.mode = mode
+        self.message = message  # part of the error that reports the failure
+        self.switches = switches or {}  # what the stub is told to fail
+        self.kwargs = kwargs or {}
+        self.libs = libs or {}  # libgl, libx11 or libegl replaced by a library that is not the stub
+        self.current = current  # whether a context of the application is current (what share and detect use)
+        self.counters = counters  # how often the stub saw it, when the failure happened
+
+    def __repr__(self):
+        return self.name
+
+
+def create_failing(backend, failure, stub, extra_libs):
+    """Makes creating a context fail the given way, returns the error message."""
+    stub.lib.stub_set_glx_current(0xbeef if failure.current else 0)
+    stub.lib.stub_set_egl_current(0xbeef if failure.current else 0)
+    for name, value in failure.switches.items():
+        setattr(stub, name, value)
+    kwargs = dict(failure.kwargs)
+    for name, library in failure.libs.items():
+        kwargs[name] = extra_libs[library]
+    create = stub.egl_context if backend == 'egl' else stub.x11_context
+    try:
+        create(mode=failure.mode, **kwargs)
+    except Exception as e:
+        return str(e)  # the traceback must not outlive this, its frames hold references
+    raise AssertionError('%s: creating the context did not fail' % failure)
+
+
+def check_no_object_leaks(backend, failure, stub, extra_libs):
+    """Every object that a failed create leaves behind holds a reference to the type. The reference
+    count of a type is not exact in free-threaded builds, it moves by one or two while the interpreter
+    warms up, so look at what many failures add."""
+    from glcontext import egl, x11
+    kind = (egl if backend == 'egl' else x11).GLContext
+    for _ in range(3):
+        create_failing(backend, failure, stub, extra_libs)
+    gc.collect()
+    before = sys.getrefcount(kind)
+    for _ in range(25):
+        create_failing(backend, failure, stub, extra_libs)
+    gc.collect()
+    grew = sys.getrefcount(kind) - before
+    assert grew < 5, 'the half built objects are not freed (25 failures added %d references)' % grew
+
+
+def check_failure(backend, failure):
+    """Runs one failure with a stub of its own and checks that all that was opened is closed once."""
+    stub = Stub()
+    empty = Library(copy_of(build_library_cached(EMPTY_SOURCE, 'libempty.so')))
+    bad = os.path.join(stub.tmp, 'does-not-exist.so')
+    extra_libs = {'empty': empty.path, 'bad': bad}
+    error = create_failing(backend, failure, stub, extra_libs)
+    assert failure.message in error, 'unexpected error %r' % error
+
+    for name in ('n_x_open', 'n_x_close', 'n_x_destroy_window', 'n_x_free', 'n_glx_create', 'n_glx_destroy',
+                 'n_egl_create', 'n_egl_destroy'):
+        expected = failure.counters.get(name, 0)
+        assert getattr(stub, name) == expected, '%s is %d, expected %d' % (name, getattr(stub, name), expected)
+    assert stub.n_x_open == stub.n_x_close, 'the display was not closed'
+    assert stub.n_glx_create == stub.n_glx_destroy, 'the context was not destroyed'
+    assert stub.n_egl_create == stub.n_egl_destroy, 'the context was not destroyed'
+    assert stub.lib.stub_get_x_handler() == X11_DEFAULT_HANDLER, 'the X error handler is left behind'
+    assert (stub.lib.stub_get_glx_current() or 0) == (0xbeef if failure.current else 0), \
+        'unbound the context of the application'
+    check_no_object_leaks(backend, failure, stub, extra_libs)
+    assert empty.closed_by_modules(), 'the library that was opened but has no functions stays loaded'
+    assert stub.library.closed_by_modules(), 'the libraries stay loaded'
+    stub.cleanup()
+
+
+def run_failures(backend, failures):
+    """Runs all failures and reports every one that leaves something behind, not only the first."""
+    problems = []
+    for failure in failures:
+        try:
+            check_failure(backend, failure)
+        except AssertionError as e:
+            problems.append('%s: %s' % (failure, e))
+    assert not problems, '%d of %d failures leave something behind:\n  %s' % (
+        len(problems), len(failures), '\n  '.join(problems))
+
+
+# what is left to clean up after each failure: 'n_x_free' is the fbconfig and the visual, 'n_x_destroy_window'
+# the window. Most failures leave nothing, the point is that the libraries and the object are released.
+X11_CREATE_FAILURES = [
+    Failure('libgl not found', 'standalone', 'not found in', libs={'libgl': 'bad'}),
+    Failure('libx11 not found', 'standalone', 'not loaded', libs={'libx11': 'bad'}),
+    Failure('no glXChooseFBConfig', 'standalone', 'glXChooseFBConfig not found', libs={'libgl': 'empty'}),
+    Failure('no XOpenDisplay', 'standalone', 'XOpenDisplay not found', libs={'libx11': 'empty'}),
+    Failure('unknown mode', 'wayland', 'unknown mode'),
+    Failure('detect without a context', 'detect', 'cannot detect OpenGL context'),
+    Failure('share without a context', 'share', 'cannot detect OpenGL context'),
+    Failure('standalone no display', 'standalone', 'cannot open display', {'fail_open_display': 1}),
+    Failure('standalone no fbconfig', 'standalone', 'glXChooseFBConfig failed',
+            {'fail_choose_fbconfig': 1}, n_x_open=1, n_x_close=1),
+    Failure('standalone no visual', 'standalone', 'cannot choose visual',
+            {'fail_choose_visual': 1}, n_x_open=1, n_x_close=1, n_x_free=1),
+    Failure('standalone no window', 'standalone', 'cannot create window',
+            {'fail_create_window': 1}, n_x_open=1, n_x_close=1, n_x_free=2),
+    Failure('standalone no glXCreateContextAttribsARB', 'standalone', 'glXCreateContextAttribsARB not found',
+            {'fail_no_arb': 1}, n_x_open=1, n_x_close=1, n_x_free=2, n_x_destroy_window=1),
+    Failure('standalone no context', 'standalone', 'cannot create context',
+            {'fail_create_context': 1}, n_x_open=1, n_x_close=1, n_x_free=2, n_x_destroy_window=1),
+    Failure('standalone no context without glversion', 'standalone', 'cannot create context',
+            {'fail_create_context': 1}, {'glversion': 0}, n_x_open=1, n_x_close=1, n_x_free=2, n_x_destroy_window=1),
+    Failure('standalone cannot make current', 'standalone', 'glXMakeCurrent failed',
+            {'fail_make_current': 1}, n_x_open=1, n_x_close=1, n_x_free=2, n_x_destroy_window=1,
+            n_glx_create=1, n_glx_destroy=1),
+    # the display belongs to the application, it is never closed
+    Failure('share no fbconfig', 'share', 'glXChooseFBConfig failed', {'fail_choose_fbconfig': 1}, current=True),
+    Failure('share no visual', 'share', 'cannot choose visual', {'fail_choose_visual': 1}, current=True, n_x_free=1),
+    Failure('share no glXCreateContextAttribsARB', 'share', 'glXCreateContextAttribsARB not found',
+            {'fail_no_arb': 1}, current=True, n_x_free=2),
+    Failure('share no context', 'share', 'cannot create context',
+            {'fail_create_context': 1}, current=True, n_x_free=2),
+    Failure('share no context without glversion', 'share', 'cannot create context',
+            {'fail_create_context': 1}, {'glversion': 0}, current=True, n_x_free=2),
+    Failure('share cannot make current', 'share', 'glXMakeCurrent failed',
+            {'fail_make_current': 1}, current=True, n_x_free=2, n_glx_create=1, n_glx_destroy=1),
+]
+
+EGL_CREATE_FAILURES = [
+    Failure('libgl not found', 'standalone', 'not loaded', libs={'libgl': 'bad'}),
+    Failure('libegl not found', 'standalone', 'not loaded', libs={'libegl': 'bad'}),
+    Failure('no eglGetError', 'standalone', 'eglGetError not found', libs={'libegl': 'empty'}),
+    Failure('unknown mode', 'wayland', 'unknown mode'),
+    Failure('standalone eglQueryDevicesEXT', 'standalone', 'eglQueryDevicesEXT failed', {'fail_egl_query_devices': 1}),
+    Failure('standalone no such device', 'standalone', 'requested device index 5', kwargs={'device_index': 5}),
+    Failure('standalone eglGetPlatformDisplayEXT', 'standalone', 'eglGetPlatformDisplayEXT failed',
+            {'fail_egl_display': 1}),
+    Failure('standalone eglInitialize', 'standalone', 'eglInitialize failed', {'fail_egl_initialize': 1}),
+    Failure('standalone eglChooseConfig', 'standalone', 'eglChooseConfig failed', {'fail_egl_choose_config': 1}),
+    Failure('standalone eglBindAPI', 'standalone', 'eglBindAPI failed', {'fail_egl_bind_api': 1}),
+    Failure('standalone eglCreateContext', 'standalone', 'eglCreateContext failed', {'fail_create_context': 1}),
+    Failure('share without a context', 'share', 'cannot detect OpenGL context'),
+    Failure('share eglChooseConfig', 'share', 'eglChooseConfig failed', {'fail_egl_choose_config': 1}, current=True),
+    Failure('share eglBindAPI', 'share', 'eglBindAPI failed', {'fail_egl_bind_api': 1}, current=True),
+    Failure('share eglCreateContext', 'share', 'eglCreateContext failed', {'fail_create_context': 1}, current=True),
+]
+
+
+def scenario_x11_create_failures():
+    """A context that cannot be created releases what was created so far and the half built object is freed.
+
+    The object, the display, the window, fbconfig and visual, and the libraries stayed behind.
+    """
+    run_failures('x11', X11_CREATE_FAILURES)
+
+
+def scenario_egl_create_failures():
+    """The same for EGL, a failing create used to leave the object and the libraries behind."""
+    run_failures('egl', EGL_CREATE_FAILURES)
+
+
+def scenario_create_failure_then_success(name):
+    """A failed create does not get in the way of the next one, the libraries are opened again."""
+    stub = Stub()
+    create = stub.egl_context if name == 'egl' else stub.x11_context
+    for _ in range(3):
+        stub.fail_create_context = 1
+        try:
+            create(mode='standalone')
+        except Exception:
+            pass
+        else:
+            raise AssertionError('creating the context did not fail')
+        stub.fail_create_context = 0
+        ctx = create(mode='standalone')
+        assert ctx.load('glXCreateContext') if name == 'x11' else ctx.load('eglCreateContext')
+        ctx.release()
+        del ctx
+    assert stub.n_glx_create == stub.n_glx_destroy and stub.n_egl_create == stub.n_egl_destroy
+    assert stub.n_x_open == stub.n_x_close
+    stub.cleanup()
+
+
+def failing_create_leaks_nothing_real(name):
+    """Failed creates with the real libraries do not add up: the connections to the X server are closed
+    (the server stops at 256 clients) and the objects are freed."""
+    backend = backend_for(name)
+    from glcontext import egl, x11
+    kind = (egl if name == 'egl' else x11).GLContext
+    for _ in range(5):  # warm up
+        try:
+            backend(mode='standalone', glversion=999)
+        except Exception:
+            pass
+        else:
+            skip('creating an OpenGL 9.9 context did not fail')
+    gc.collect()
+    fds = open_fds()
+    refs = sys.getrefcount(kind)
+    for _ in range(300):
+        try:
+            backend(mode='standalone', glversion=999)  # there is no OpenGL 9.9
+        except Exception:
+            pass
+    gc.collect()
+    assert sys.getrefcount(kind) == refs, 'leaked %d contexts' % (sys.getrefcount(kind) - refs)
+    assert open_fds() < fds + 20, 'leaked %d file descriptors' % (open_fds() - fds)
+    # and the backend still works
+    backend(mode='standalone', glversion=330).release()
+
+
 def scenario_exit_with_live_contexts(name):
     """Contexts that are still alive at shutdown are destroyed by the interpreter, that must not crash."""
     global live_contexts
@@ -526,6 +804,12 @@ SCENARIOS = {
     'egl_dealloc_unrelated_context': scenario_egl_dealloc_unrelated_context,
     'egl_type_refcount': scenario_egl_type_refcount,
     'egl_dealloc_real': scenario_egl_dealloc_real,
+    'x11_create_failures': scenario_x11_create_failures,
+    'egl_create_failures': scenario_egl_create_failures,
+    'x11_create_failure_then_success': lambda: scenario_create_failure_then_success('x11'),
+    'egl_create_failure_then_success': lambda: scenario_create_failure_then_success('egl'),
+    'x11_create_failure_real': lambda: failing_create_leaks_nothing_real('x11'),
+    'egl_create_failure_real': lambda: failing_create_leaks_nothing_real('egl'),
     'x11_exit_with_live_contexts': lambda: scenario_exit_with_live_contexts('x11'),
     'egl_exit_with_live_contexts': lambda: scenario_exit_with_live_contexts('egl'),
 }
@@ -611,6 +895,30 @@ class ErrorPathsTestCase(TestCase):
     @pytest.mark.skipif(not LINUX, reason='requires egl')
     def test_egl_dealloc_real(self):
         run_scenario('egl_dealloc_real')
+
+    @pytest.mark.skipif(not LINUX, reason='requires x11')
+    def test_x11_create_failures(self):
+        run_scenario('x11_create_failures')
+
+    @pytest.mark.skipif(not LINUX, reason='requires egl')
+    def test_egl_create_failures(self):
+        run_scenario('egl_create_failures')
+
+    @pytest.mark.skipif(not LINUX, reason='requires x11')
+    def test_x11_create_failure_then_success(self):
+        run_scenario('x11_create_failure_then_success')
+
+    @pytest.mark.skipif(not LINUX, reason='requires egl')
+    def test_egl_create_failure_then_success(self):
+        run_scenario('egl_create_failure_then_success')
+
+    @pytest.mark.skipif(not LINUX, reason='requires x11')
+    def test_x11_create_failure_real(self):
+        run_scenario('x11_create_failure_real')
+
+    @pytest.mark.skipif(not LINUX, reason='requires egl')
+    def test_egl_create_failure_real(self):
+        run_scenario('egl_create_failure_real')
 
     @pytest.mark.skipif(not LINUX, reason='requires egl')
     def test_egl_exit_with_live_contexts(self):

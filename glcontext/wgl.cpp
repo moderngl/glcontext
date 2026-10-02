@@ -45,6 +45,40 @@ struct GLContext {
 
 PyTypeObject * GLContext_type;
 
+static void GLContext_release_native(GLContext * self, bool from_dealloc);
+
+// Cleans up when creating a context fails: whatever was created so far is released and the
+// half built object is dropped. Every error return of meth_create_context goes through here
+// unless it hands the object out with done().
+// A detected context (not standalone) belongs to the application and is left alone.
+// The library is only freed here: the application may have been given function pointers
+// of a context that was created successfully, so release() and the deallocation keep it loaded.
+struct CreateGuard {
+    GLContext * res;
+
+    CreateGuard(GLContext * res) : res(res) {}
+
+    GLContext * done() {
+        GLContext * created = res;
+        res = NULL;
+        return created;
+    }
+
+    ~CreateGuard() {
+        if (!res) {
+            return;
+        }
+        if (res->standalone) {
+            GLContext_release_native(res, true);
+        }
+        if (res->libgl) {
+            FreeLibrary(res->libgl);
+            res->libgl = NULL;
+        }
+        Py_DECREF(res);
+    }
+};
+
 GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwargs) {
     static char * keywords[] = {"mode", "libgl", "glversion", NULL};
 
@@ -60,6 +94,8 @@ GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwa
     if (!res) {
         return NULL;
     }
+
+    CreateGuard guard(res);
 
     // The mode parameter is required for dll's specifed as libgl
     // to load successfully along with its dependencies on Python 3.8+.
@@ -133,7 +169,7 @@ GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwa
             return NULL;
         }
 
-        return res;
+        return guard.done();
     }
 
     if (!strcmp(mode, "share")) {
@@ -179,7 +215,7 @@ GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwa
             return NULL;
         }
 
-        return res;
+        return guard.done();
     }
 
     if (!strcmp(mode, "standalone")) {
@@ -223,6 +259,8 @@ GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwa
         }
 
         if (!res->m_wglMakeCurrent(res->hdc, hrc_share)) {
+            // hrc_share is a temporary context that the object does not know about yet
+            res->m_wglDeleteContext(hrc_share);
             PyErr_Format(PyExc_Exception, "wglMakeCurrent failed");
             return NULL;
         }
@@ -230,6 +268,8 @@ GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwa
         FARPROC proc = res->m_wglGetProcAddress("wglCreateContextAttribsARB");
         res->m_wglCreateContextAttribsARB = (m_wglCreateContextAttribsARBProc)proc;
         if (!res->m_wglCreateContextAttribsARB) {
+            res->m_wglMakeCurrent(NULL, NULL);
+            res->m_wglDeleteContext(hrc_share);
             PyErr_Format(PyExc_Exception, "wglCreateContextAttribsARB not found");
             return NULL;
         }
@@ -259,7 +299,7 @@ GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwa
             return NULL;
         }
 
-        return res;
+        return guard.done();
     }
 
     PyErr_Format(PyExc_Exception, "unknown mode");
@@ -294,7 +334,8 @@ PyObject * GLContext_meth_exit(GLContext * self) {
     Py_RETURN_NONE;
 }
 
-// Destroys the context, it is safe to call more than once.
+// Destroys the context, it is safe to call more than once and with the partial state of a
+// context that could not be created: every handle is checked before it is released.
 // from_dealloc is set when the last reference was dropped, that can happen on any thread
 // and that thread may have an unrelated context current, so only unbind our own context there.
 static void GLContext_release_native(GLContext * self, bool from_dealloc) {
@@ -304,10 +345,15 @@ static void GLContext_release_native(GLContext * self, bool from_dealloc) {
         }
         self->m_wglDeleteContext(self->hrc);
         self->hrc = NULL;
-        if (self->standalone) {
+    }
+    // the window is there without a context when creating the context failed
+    if (self->standalone && self->hwnd) {
+        if (self->hdc) {
             ReleaseDC(self->hwnd, self->hdc);
-            DestroyWindow(self->hwnd);
         }
+        DestroyWindow(self->hwnd);
+        self->hwnd = NULL;
+        self->hdc = NULL;
     }
 }
 

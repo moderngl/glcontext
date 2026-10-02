@@ -92,6 +92,43 @@ struct GLContext {
 
 PyTypeObject * GLContext_type;
 
+static void GLContext_release_native(GLContext * self, bool from_dealloc);
+
+// Cleans up when creating a context fails: whatever was created so far is released and the
+// half built object is dropped. Every error return of meth_create_context goes through here
+// unless it hands the object out with done().
+// The display is not terminated, EGL hands out one display per device and the application or
+// another context may be using it, release() and the deallocation leave it initialized as well.
+// The libraries are only closed here: the application may have been given function pointers
+// of a context that was created successfully, so release() and the deallocation keep them loaded.
+struct CreateGuard {
+    GLContext * res;
+
+    CreateGuard(GLContext * res) : res(res) {}
+
+    GLContext * done() {
+        GLContext * created = res;
+        res = NULL;
+        return created;
+    }
+
+    ~CreateGuard() {
+        if (!res) {
+            return;
+        }
+        GLContext_release_native(res, true);
+        if (res->libegl) {
+            dlclose(res->libegl);
+            res->libegl = NULL;
+        }
+        if (res->libgl) {
+            dlclose(res->libgl);
+            res->libgl = NULL;
+        }
+        Py_DECREF(res);
+    }
+};
+
 GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwargs) {
     static char * keywords[] = {"mode", "libgl", "libegl", "glversion", "device_index", NULL};
 
@@ -109,6 +146,8 @@ GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwa
     if (!res) {
         return NULL;
     }
+
+    CreateGuard guard(res);
 
     res->libgl = dlopen(libgl, RTLD_LAZY);
     if (!res->libgl) {
@@ -278,7 +317,7 @@ GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwa
         }
 
         res->m_eglMakeCurrent(res->dpy, EGL_NO_SURFACE, EGL_NO_SURFACE, res->ctx);
-        return res;
+        return guard.done();
     }
 
     if (!strcmp(mode, "share")) {
@@ -338,7 +377,7 @@ GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwa
         }
 
         res->m_eglMakeCurrent(res->dpy, res->wnd, res->wnd, res->ctx);
-        return res;
+        return guard.done();
     }
 
     PyErr_Format(PyExc_Exception, "unknown mode");
