@@ -35,6 +35,51 @@ jobs:
       - name: wheel
         run: python setup.py bdist_wheel
 
+  build-free-threaded:
+    name: build (free-threaded)
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version: ['3.13t', '3.14t']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: setup
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: deps
+        run: python -m pip install -U pip wheel setuptools
+
+      - name: wheel
+        run: python setup.py bdist_wheel
+
+      - name: install
+        run: python -m pip install --no-index --find-links dist glcontext
+
+      # not in the checkout, there the source directory would be imported instead of the wheel
+      - name: import
+        shell: bash
+        working-directory: ${{ runner.temp }}
+        run: |
+          python - <<'EOF'
+          import importlib
+          import sys
+          import sysconfig
+
+          print(sys.version)
+          assert sysconfig.get_config_var('Py_GIL_DISABLED'), 'not a free-threaded build'
+
+          for name in ['wgl'] if sys.platform == 'win32' else ['x11', 'egl']:
+              module = importlib.import_module('glcontext.' + name)
+              print('imported', module.__file__)
+          EOF
+
   build-aarch64:
     strategy:
       fail-fast: false
