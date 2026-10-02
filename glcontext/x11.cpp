@@ -48,6 +48,26 @@ int SilentXErrorHandler(Display * d, XErrorEvent * e) {
     return 0;
 }
 
+// Installs the SilentXErrorHandler and puts the default handler back when it goes out of scope,
+// so every way out of the context creation restores it. restore() does it earlier.
+struct SilentXErrors {
+    m_XSetErrorHandlerProc set_handler;
+    bool active;
+
+    SilentXErrors(m_XSetErrorHandlerProc set_handler) : set_handler(set_handler), active(true) {
+        set_handler(SilentXErrorHandler);
+    }
+
+    void restore() {
+        if (active) {
+            active = false;
+            set_handler(NULL);
+        }
+    }
+
+    ~SilentXErrors() { restore(); }
+};
+
 // Xlib is not thread safe without XInitThreads, and the X error handler is process global.
 // The GIL used to serialize opening and closing displays, so do the same without it.
 #ifdef Py_GIL_DISABLED
@@ -321,7 +341,7 @@ GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwa
             return NULL;
         }
 
-        res->m_XSetErrorHandler(SilentXErrorHandler);
+        SilentXErrors silent_x_errors(res->m_XSetErrorHandler);
 
         if (glversion) {
             void (* proc)() = res->m_glXGetProcAddress((const unsigned char *)"glXCreateContextAttribsARB");
@@ -348,7 +368,7 @@ GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwa
             return NULL;
         }
 
-        res->m_XSetErrorHandler(NULL);
+        silent_x_errors.restore();
 
         if (!res->m_glXMakeCurrent(res->dpy, res->wnd, res->ctx)) {
             PyErr_Format(PyExc_Exception, "(share) glXMakeCurrent failed");
@@ -418,7 +438,7 @@ GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwa
             return NULL;
         }
 
-        res->m_XSetErrorHandler(SilentXErrorHandler);
+        SilentXErrors silent_x_errors(res->m_XSetErrorHandler);
 
         if (glversion) {
             void (* proc)() = res->m_glXGetProcAddress((const unsigned char *)"glXCreateContextAttribsARB");
@@ -445,7 +465,7 @@ GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwa
             return NULL;
         }
 
-        res->m_XSetErrorHandler(NULL);
+        silent_x_errors.restore();
 
         if (!res->m_glXMakeCurrent(res->dpy, res->wnd, res->ctx)) {
             PyErr_Format(PyExc_Exception, "(standalone) glXMakeCurrent failed");

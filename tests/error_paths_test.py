@@ -30,7 +30,7 @@ typedef void * ptr;
 int n_glx_create, n_glx_destroy, n_glx_bind, n_glx_unbind, n_glx_unbind_other;
 int n_x_open, n_x_close, n_x_destroy_window, n_x_free;
 int n_egl_create, n_egl_destroy, n_egl_bind, n_egl_unbind;
-int fail_choose_fbconfig, fail_choose_visual, fail_create_context;
+int fail_choose_fbconfig, fail_choose_visual, fail_create_context, fail_no_arb;
 
 static __thread ptr glx_current;
 static __thread ptr glx_unbound;  // what the last glXMakeCurrent(NULL) of this thread unbound
@@ -91,6 +91,7 @@ static int streq(const char * a, const char * b) {
     return *a == *b;
 }
 ptr glXGetProcAddress(const unsigned char * name) {
+    if (fail_no_arb) return 0;
     return streq((const char *)name, "glXCreateContextAttribsARB") ? (ptr)glXCreateContextAttribsARB : 0;
 }
 
@@ -342,6 +343,64 @@ def scenario_egl_type_refcount():
     stub.cleanup()
 
 
+X11_DEFAULT_HANDLER = 1  # what the stub reports for the Xlib default error handler
+
+# the ways creating an x11 context can fail after the silent error handler was installed
+X11_FAILURES = [
+    ('standalone', {'fail_create_context': 1}, {}),
+    ('standalone', {'fail_no_arb': 1}, {}),
+    ('standalone', {'fail_create_context': 1}, {'glversion': 0}),
+    ('share', {'fail_create_context': 1}, {}),
+    ('share', {'fail_no_arb': 1}, {}),
+    ('share', {'fail_create_context': 1}, {'glversion': 0}),
+]
+
+
+def x11_failing_create(stub, mode, switches, kwargs):
+    """Make creating an x11 context fail the given way, returns the error."""
+    stub.lib.stub_set_glx_current(0xbeef)  # the share mode needs a current context
+    for name, value in switches.items():
+        setattr(stub, name, value)
+    try:
+        stub.x11_context(mode=mode, **kwargs)
+    except Exception as e:
+        return e
+    finally:
+        for name in switches:
+            setattr(stub, name, 0)
+    raise AssertionError('creating the context did not fail: %s %s %s' % (mode, switches, kwargs))
+
+
+def scenario_x11_handler_restored_after_failure():
+    """The silent X error handler used to stay installed when the context could not be created."""
+    stub = Stub()
+    for mode, switches, kwargs in X11_FAILURES:
+        assert stub.lib.stub_get_x_handler() == X11_DEFAULT_HANDLER
+        x11_failing_create(stub, mode, switches, kwargs)
+        assert stub.lib.stub_get_x_handler() == X11_DEFAULT_HANDLER, \
+            'the silent error handler is still installed after %s %s %s' % (mode, switches, kwargs)
+    stub.cleanup()
+
+
+def scenario_x11_handler_restored_after_failure_real():
+    """The same with libX11, an application that sets its own error handler would crash on the next X error."""
+    from ctypes.util import find_library
+    if not os.environ.get('DISPLAY'):
+        skip('no display')
+    libx11 = ctypes.CDLL(find_library('X11'))
+    libx11.XSetErrorHandler.restype = ctypes.c_void_p
+    libx11.XSetErrorHandler.argtypes = [ctypes.c_void_p]
+    backend = backend_for('x11')
+    default = libx11.XSetErrorHandler(None)
+    try:
+        backend(mode='standalone', glversion=999)  # there is no OpenGL 9.9
+    except Exception:
+        pass
+    else:
+        skip('creating an OpenGL 9.9 context did not fail')
+    assert libx11.XSetErrorHandler(None) == default, 'the silent error handler is still installed'
+
+
 def open_fds():
     return len(os.listdir('/proc/self/fd'))
 
@@ -385,6 +444,8 @@ SCENARIOS = {
     'x11_dealloc_unrelated_context': scenario_x11_dealloc_unrelated_context,
     'x11_type_refcount': scenario_x11_type_refcount,
     'x11_dealloc_real': scenario_x11_dealloc_real,
+    'x11_handler_restored_after_failure': scenario_x11_handler_restored_after_failure,
+    'x11_handler_restored_after_failure_real': scenario_x11_handler_restored_after_failure_real,
     'egl_dealloc_releases': scenario_egl_dealloc_releases,
     'egl_dealloc_unrelated_context': scenario_egl_dealloc_unrelated_context,
     'egl_type_refcount': scenario_egl_type_refcount,
@@ -434,6 +495,14 @@ class ErrorPathsTestCase(TestCase):
     @pytest.mark.skipif(not LINUX, reason='requires x11')
     def test_x11_dealloc_real(self):
         run_scenario('x11_dealloc_real')
+
+    @pytest.mark.skipif(not LINUX, reason='requires x11')
+    def test_x11_handler_restored_after_failure(self):
+        run_scenario('x11_handler_restored_after_failure')
+
+    @pytest.mark.skipif(not LINUX, reason='requires x11')
+    def test_x11_handler_restored_after_failure_real(self):
+        run_scenario('x11_handler_restored_after_failure_real')
 
     @pytest.mark.skipif(not LINUX, reason='requires x11')
     def test_x11_exit_with_live_contexts(self):
