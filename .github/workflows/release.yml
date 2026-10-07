@@ -44,5 +44,5 @@ jobs:
     steps:
       - uses: actions/upload-artifact/merge@v6
         with:
-          name: glcontext-3.0.0
+          name: glcontext-3.1.0
           delete-merged: true

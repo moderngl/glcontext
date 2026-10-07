@@ -1,6 +1,6 @@
 import os
 
-__version__ = '2.3.7'
+__version__ = '3.1.0'
 
 
 def default_backend():

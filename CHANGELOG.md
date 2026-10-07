@@ -1,5 +1,8 @@
-
 # Change Log
+
+## 3.1.0
+
+Python 3.14 support
 
 ## 2.3.7
 

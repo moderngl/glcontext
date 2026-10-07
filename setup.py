@@ -79,7 +79,7 @@ ext_modules = {
 
 setup(
     name='glcontext',
-    version='3.0.0',
+    version='3.1.0',
     description='Portable Headless OpenGL Context',
     long_description=open('README.md', encoding='utf-8').read(),
     long_description_content_type='text/markdown',
