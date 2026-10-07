@@ -1,6 +1,8 @@
 #include <Python.h>
 #include <structmember.h>
 
+#include "freethreading.hpp"
+
 #include <OpenGL/OpenGL.h>
 #include <ApplicationServices/ApplicationServices.h>
 
@@ -20,6 +22,31 @@ struct GLContext {
 
 PyTypeObject * GLContext_type;
 
+static void GLContext_release_native(GLContext * self, bool from_dealloc);
+
+// Cleans up when creating a context fails: whatever was created so far is released and the
+// half built object is dropped. Every error return of meth_create_context goes through here
+// unless it hands the object out with done().
+struct CreateGuard {
+    GLContext * res;
+
+    CreateGuard(GLContext * res) : res(res) {}
+
+    GLContext * done() {
+        GLContext * created = res;
+        res = NULL;
+        return created;
+    }
+
+    ~CreateGuard() {
+        if (!res) {
+            return;
+        }
+        GLContext_release_native(res, true);
+        Py_DECREF(res);
+    }
+};
+
 GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwargs) {
     static char * keywords[] = {"mode", NULL};
 
@@ -29,7 +56,12 @@ GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwa
         return NULL;
     }
 
-    GLContext * res = PyObject_New(GLContext, GLContext_type);
+    GLContext * res = (GLContext *)PyType_GenericAlloc(GLContext_type, 0);
+    if (!res) {
+        return NULL;
+    }
+
+    CreateGuard guard(res);
 
     if (!strcmp(mode, "detect")) {
         res->standalone = false;
@@ -40,7 +72,7 @@ GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwa
             return NULL;
         }
 
-        return res;
+        return guard.done();
     }
 
     if (!strcmp(mode, "standalone")) {
@@ -91,7 +123,7 @@ GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwa
         res->ctx = cgl_context;
 
         CGLSetCurrentContext(cgl_context);
-        return res;
+        return guard.done();
     }
 
     PyErr_Format(PyExc_Exception, "unknown mode");
@@ -100,38 +132,72 @@ GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwa
 
 PyObject * GLContext_meth_load(GLContext * self, PyObject * arg) {
     PyObject * prefix = PyUnicode_FromString("_");
+    if (!prefix) {
+        return NULL;
+    }
     PyObject * prefixed = PyNumber_Add(prefix, arg);
+    Py_DECREF(prefix);
+    if (!prefixed) {
+        return NULL;
+    }
     NSSymbol symbol = NULL;
     const char * method = PyUnicode_AsUTF8(prefixed);
+    if (!method) {
+        Py_DECREF(prefixed);
+        return NULL;
+    }
     if (NSIsSymbolNameDefined(method)) {
         symbol = NSLookupAndBindSymbol(method);
     }
     Py_DECREF(prefixed);
-    Py_DECREF(prefix);
     return PyLong_FromVoidPtr(symbol ? NSAddressOfSymbol(symbol) : NULL);
 }
 
 PyObject * GLContext_meth_enter(GLContext * self) {
-    self->old_context = (void *)CGLGetCurrentContext();
-    CGLSetCurrentContext(self->ctx);
-    Py_RETURN_NONE;
-}
-
-PyObject * GLContext_meth_exit(GLContext * self) {
-    CGLSetCurrentContext((CGLContextObj)self->old_context);
-    Py_RETURN_NONE;
-}
-
-PyObject * GLContext_meth_release(GLContext * self) {
-    if (self->standalone) {
-        CGLSetCurrentContext(NULL);
-        CGLDestroyContext(self->ctx);
+    ObjectLock lock((PyObject *)self);
+    if (self->ctx) {
+        self->old_context = (void *)CGLGetCurrentContext();
+        CGLSetCurrentContext(self->ctx);
     }
     Py_RETURN_NONE;
 }
 
+PyObject * GLContext_meth_exit(GLContext * self) {
+    ObjectLock lock((PyObject *)self);
+    CGLSetCurrentContext((CGLContextObj)self->old_context);
+    Py_RETURN_NONE;
+}
+
+// Destroys the context if the object owns it, it is safe to call more than once.
+// from_dealloc is set when the last reference was dropped, that can happen on any thread
+// and that thread may have an unrelated context current, so only unbind our own context there.
+static void GLContext_release_native(GLContext * self, bool from_dealloc) {
+    if (self->standalone && self->ctx) {
+        if (self->old_context == (void *)self->ctx) {
+            // entered while current, __exit__ would restore the context destroyed here
+            self->old_context = NULL;
+        }
+        if (!from_dealloc || CGLGetCurrentContext() == self->ctx) {
+            CGLSetCurrentContext(NULL);
+        }
+        CGLDestroyContext(self->ctx);
+        self->ctx = NULL;
+    }
+}
+
+PyObject * GLContext_meth_release(GLContext * self) {
+    ObjectLock lock((PyObject *)self);
+    GLContext_release_native(self, false);
+    Py_RETURN_NONE;
+}
+
 void GLContext_dealloc(GLContext * self) {
-    Py_TYPE(self)->tp_free(self);
+    // Contexts that were never released would leak the native context.
+    // Nothing else references the object, so there is nothing to lock.
+    GLContext_release_native(self, true);
+    PyTypeObject * type = Py_TYPE(self);
+    type->tp_free(self);
+    Py_DECREF(type); // the instance owns a reference to its heap type
 }
 
 PyMethodDef GLContext_methods[] = {
@@ -166,6 +232,12 @@ PyModuleDef module_def = {PyModuleDef_HEAD_INIT, "darwin", NULL, -1, module_meth
 
 extern "C" PyObject * PyInit_darwin() {
     PyObject * module = PyModule_Create(&module_def);
+#ifdef Py_GIL_DISABLED
+    if (!module || PyUnstable_Module_SetGIL(module, Py_MOD_GIL_NOT_USED) < 0) {
+        Py_XDECREF(module);
+        return NULL;
+    }
+#endif
     GLContext_type = (PyTypeObject *)PyType_FromSpec(&GLContext_spec);
     PyModule_AddObject(module, "GLContext", (PyObject *)GLContext_type);
     return module;
