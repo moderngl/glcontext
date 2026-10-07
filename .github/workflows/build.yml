@@ -29,6 +29,10 @@ jobs:
           python-version: ${{ matrix.python-version }}
           architecture: ${{ matrix.architecture }}
 
+      - name: system deps
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libgl1-mesa-dev libegl1-mesa-dev libx11-dev
+
       - name: deps
         run: python -m pip install -U pip wheel setuptools
 
