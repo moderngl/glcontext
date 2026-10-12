@@ -1,6 +1,8 @@
 #include <Python.h>
 #include <structmember.h>
 
+#include "freethreading.hpp"
+
 #include <OpenGL/OpenGL.h>
 #include <ApplicationServices/ApplicationServices.h>
 
@@ -29,7 +31,10 @@ GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwa
         return NULL;
     }
 
-    GLContext * res = PyObject_New(GLContext, GLContext_type);
+    GLContext * res = (GLContext *)PyType_GenericAlloc(GLContext_type, 0);
+    if (!res) {
+        return NULL;
+    }
 
     if (!strcmp(mode, "detect")) {
         res->standalone = false;
@@ -112,20 +117,30 @@ PyObject * GLContext_meth_load(GLContext * self, PyObject * arg) {
 }
 
 PyObject * GLContext_meth_enter(GLContext * self) {
-    self->old_context = (void *)CGLGetCurrentContext();
-    CGLSetCurrentContext(self->ctx);
+    ObjectLock lock((PyObject *)self);
+    if (self->ctx) {
+        self->old_context = (void *)CGLGetCurrentContext();
+        CGLSetCurrentContext(self->ctx);
+    }
     Py_RETURN_NONE;
 }
 
 PyObject * GLContext_meth_exit(GLContext * self) {
+    ObjectLock lock((PyObject *)self);
     CGLSetCurrentContext((CGLContextObj)self->old_context);
     Py_RETURN_NONE;
 }
 
 PyObject * GLContext_meth_release(GLContext * self) {
-    if (self->standalone) {
+    ObjectLock lock((PyObject *)self);
+    if (self->standalone && self->ctx) {
+        if (self->old_context == (void *)self->ctx) {
+            // entered while current, __exit__ would restore the context destroyed here
+            self->old_context = NULL;
+        }
         CGLSetCurrentContext(NULL);
         CGLDestroyContext(self->ctx);
+        self->ctx = NULL;
     }
     Py_RETURN_NONE;
 }
@@ -166,6 +181,12 @@ PyModuleDef module_def = {PyModuleDef_HEAD_INIT, "darwin", NULL, -1, module_meth
 
 extern "C" PyObject * PyInit_darwin() {
     PyObject * module = PyModule_Create(&module_def);
+#ifdef Py_GIL_DISABLED
+    if (!module || PyUnstable_Module_SetGIL(module, Py_MOD_GIL_NOT_USED) < 0) {
+        Py_XDECREF(module);
+        return NULL;
+    }
+#endif
     GLContext_type = (PyTypeObject *)PyType_FromSpec(&GLContext_spec);
     PyModule_AddObject(module, "GLContext", (PyObject *)GLContext_type);
     return module;

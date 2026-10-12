@@ -1,6 +1,8 @@
 #include <Python.h>
 #include <structmember.h>
 
+#include "freethreading.hpp"
+
 #include <dlfcn.h>
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
@@ -45,6 +47,21 @@ typedef XErrorHandler (* m_XSetErrorHandlerProc)(XErrorHandler);
 int SilentXErrorHandler(Display * d, XErrorEvent * e) {
     return 0;
 }
+
+// Xlib is not thread safe without XInitThreads, and the X error handler is process global.
+// The GIL used to serialize opening and closing displays, so do the same without it.
+#ifdef Py_GIL_DISABLED
+PyMutex x11_mutex;
+
+struct X11Lock {
+    X11Lock() { PyMutex_Lock(&x11_mutex); }
+    ~X11Lock() { PyMutex_Unlock(&x11_mutex); }
+};
+#else
+struct X11Lock {
+    X11Lock() {}
+};
+#endif
 
 struct GLContext {
     PyObject_HEAD
@@ -99,7 +116,10 @@ GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwa
         return NULL;
     }
 
-    GLContext * res = PyObject_New(GLContext, GLContext_type);
+    GLContext * res = (GLContext *)PyType_GenericAlloc(GLContext_type, 0);
+    if (!res) {
+        return NULL;
+    }
 
     res->libgl = dlopen(libgl, RTLD_LAZY);
     if (!res->libgl) {
@@ -251,6 +271,8 @@ GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwa
     }
 
     if (!strcmp(mode, "share")) {
+        X11Lock x11_lock;
+
         res->standalone = true;
         res->own_window = false;
 
@@ -337,6 +359,8 @@ GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwa
     }
 
     if (!strcmp(mode, "standalone")) {
+        X11Lock x11_lock;
+
         res->standalone = true;
         res->own_window = true;
 
@@ -445,26 +469,41 @@ PyObject * GLContext_meth_load(GLContext * self, PyObject * arg) {
 }
 
 PyObject * GLContext_meth_enter(GLContext * self) {
-    self->old_display = (void *)self->m_glXGetCurrentDisplay();
-    self->old_window = (void *)self->m_glXGetCurrentDrawable();
-    self->old_context = (void *)self->m_glXGetCurrentContext();
-    self->m_glXMakeCurrent(self->dpy, self->wnd, self->ctx);
+    ObjectLock lock((PyObject *)self);
+    if (self->ctx && self->dpy) {
+        self->old_display = (void *)self->m_glXGetCurrentDisplay();
+        self->old_window = (void *)self->m_glXGetCurrentDrawable();
+        self->old_context = (void *)self->m_glXGetCurrentContext();
+        self->m_glXMakeCurrent(self->dpy, self->wnd, self->ctx);
+    }
     Py_RETURN_NONE;
 }
 
 PyObject * GLContext_meth_exit(GLContext * self) {
+    ObjectLock lock((PyObject *)self);
     self->m_glXMakeCurrent((Display *)self->old_display, (Window)self->old_window, (GLXContext)self->old_context);    
     Py_RETURN_NONE;
 }
 
 PyObject * GLContext_meth_release(GLContext * self) {
-    if (self->standalone) {
+    ObjectLock lock((PyObject *)self);
+    X11Lock x11_lock;
+    if (self->standalone && self->ctx) {
+        if (self->old_context == (void *)self->ctx) {
+            // entered while current, __exit__ would restore the context destroyed here
+            self->old_display = NULL;
+            self->old_window = NULL;
+            self->old_context = NULL;
+        }
         self->m_glXMakeCurrent(self->dpy, None, NULL);
         self->m_glXDestroyContext(self->dpy, self->ctx);
+        self->ctx = NULL;
     }
     if (self->own_window) {
         self->m_XDestroyWindow(self->dpy, self->wnd);
         self->m_XCloseDisplay(self->dpy);
+        self->own_window = false;
+        self->dpy = NULL;
     }
     if (self->fbc) {
         self->m_XFree(self->fbc);
@@ -513,6 +552,12 @@ PyModuleDef module_def = {PyModuleDef_HEAD_INIT, "x11", NULL, -1, module_methods
 
 extern "C" PyObject * PyInit_x11() {
     PyObject * module = PyModule_Create(&module_def);
+#ifdef Py_GIL_DISABLED
+    if (!module || PyUnstable_Module_SetGIL(module, Py_MOD_GIL_NOT_USED) < 0) {
+        Py_XDECREF(module);
+        return NULL;
+    }
+#endif
     GLContext_type = (PyTypeObject *)PyType_FromSpec(&GLContext_spec);
     PyModule_AddObject(module, "GLContext", (PyObject *)GLContext_type);
     return module;

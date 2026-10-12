@@ -1,6 +1,8 @@
 #include <Python.h>
 #include <structmember.h>
 
+#include "freethreading.hpp"
+
 #include <Windows.h>
 
 #define WGL_CONTEXT_PROFILE_MASK 0x9126
@@ -54,7 +56,10 @@ GLContext * meth_create_context(PyObject * self, PyObject * args, PyObject * kwa
         return NULL;
     }
 
-    GLContext * res = PyObject_New(GLContext, GLContext_type);
+    GLContext * res = (GLContext *)PyType_GenericAlloc(GLContext_type, 0);
+    if (!res) {
+        return NULL;
+    }
 
     // The mode parameter is required for dll's specifed as libgl
     // to load successfully along with its dependencies on Python 3.8+.
@@ -271,23 +276,31 @@ PyObject * GLContext_meth_load(GLContext * self, PyObject * arg) {
 }
 
 PyObject * GLContext_meth_enter(GLContext * self) {
-    self->old_context = (void *)self->m_wglGetCurrentContext();
-    self->old_display = (void *)self->m_wglGetCurrentDC();
-    self->m_wglMakeCurrent(self->hdc, self->hrc);
+    ObjectLock lock((PyObject *)self);
+    if (self->hrc) {
+        self->old_context = (void *)self->m_wglGetCurrentContext();
+        self->old_display = (void *)self->m_wglGetCurrentDC();
+        self->m_wglMakeCurrent(self->hdc, self->hrc);
+    }
     Py_RETURN_NONE;
 }
 
 PyObject * GLContext_meth_exit(GLContext * self) {
+    ObjectLock lock((PyObject *)self);
     self->m_wglMakeCurrent((HDC)self->old_display, (HGLRC)self->old_context);
     Py_RETURN_NONE;
 }
 
 PyObject * GLContext_meth_release(GLContext * self) {
-    self->m_wglMakeCurrent(NULL, NULL);
-    self->m_wglDeleteContext(self->hrc);
-    if (self->standalone) {
-        ReleaseDC(self->hwnd, self->hdc);
-        DestroyWindow(self->hwnd);
+    ObjectLock lock((PyObject *)self);
+    if (self->hrc) {
+        self->m_wglMakeCurrent(NULL, NULL);
+        self->m_wglDeleteContext(self->hrc);
+        self->hrc = NULL;
+        if (self->standalone) {
+            ReleaseDC(self->hwnd, self->hdc);
+            DestroyWindow(self->hwnd);
+        }
     }
     Py_RETURN_NONE;
 }
@@ -328,6 +341,12 @@ PyModuleDef module_def = {PyModuleDef_HEAD_INIT, "wgl", NULL, -1, module_methods
 
 extern "C" PyObject * PyInit_wgl() {
     PyObject * module = PyModule_Create(&module_def);
+#ifdef Py_GIL_DISABLED
+    if (!module || PyUnstable_Module_SetGIL(module, Py_MOD_GIL_NOT_USED) < 0) {
+        Py_XDECREF(module);
+        return NULL;
+    }
+#endif
     GLContext_type = (PyTypeObject *)PyType_FromSpec(&GLContext_spec);
     PyModule_AddObject(module, "GLContext", (PyObject *)GLContext_type);
     return module;
