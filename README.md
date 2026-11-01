@@ -12,7 +12,7 @@
 
 A glcontext backend is either an extension or a submodule of the glcontext package.
 The package itself does not import any of the backends.
-Importing the base package `glcontext` must safe and lightweight.
+Importing the base package `glcontext` must be safe and lightweight.
 
 ## Structure
 
@@ -62,33 +62,33 @@ There are "empty" example backends provided for developers to help adding new ba
 There is a pure python example in [empty.py](#) and an extension example in [empty.cpp](#).
 Besides their name match, they do not depend on each other, they are independent submodules of glcontext.
 
-An "portable" backend implementation must load its dependency at runtime.
+A "portable" backend implementation must load its dependency at runtime.
 This rule is for simplifying the build of the entire package.
 If an implementation cannot provide a "portable" backend, it will not be added to this library.
-Non "portable" backends are welcome as third party libraries.
+Non "portable" backends are welcome as third-party libraries.
 
-A backend must be lightweight, its size must fit within reasonable limits.
+A backend must be lightweight; its size must fit within reasonable limits.
 
-To add support for new platforms one must edit the `setup.py` too.
-Platform specific dependencies are exceptions from the "portability" rule.
+To add support for new platforms, one must edit the `setup.py` too.
+Platform-specific dependencies are exceptions to the "portability" rule.
 
-Example for platform specific dependencies:
+Example for platform-specific dependencies:
 
-- `gdi32.lib` on windows
-- `libdl.a` on linux
+- `gdi32.lib` on Windows
+- `libdl.a` on Linux
 
-Please note that `libGL.so` is loaded dinamically by the backends.
+Please note that `libGL.so` is loaded dynamically by the backends.
 
 ## Current backends
 
-Each backend supports a `glversion` and `mode` parameters as a minimum.
-The `glversion` is the minimum OpenGL version required while `mode`
+Each backend supports `glversion` and `mode` parameters as a minimum.
+The `glversion` is the minimum OpenGL version required, while `mode`
 decides how the context is created.
 
 Modes
 
 * `detect`: Will detect an existing active OpenGL context.
-* `standalone`: Crates a headless OpenGL context
+* `standalone`: Creates a headless OpenGL context
 * `share`: Creates a new context sharing objects with the currently active context (headless)
 
 ### wgl
@@ -113,7 +113,7 @@ Parameters
 
 ### darwin
 
-Will create the the highest core context available.
+Will create the highest core context available.
 
 Parameters
 
@@ -123,7 +123,7 @@ Parameters
 
 Only supports standalone mode.
 
-If `libgl` and/or `libegl` is not passed in the backend will try to locate
+If `libgl` and/or `libegl` are not passed in, the backend will try to locate
 GL and/or EGL library using `ctypes.utils.find_library`.
 
 Parameters
@@ -163,11 +163,11 @@ pytest tests
 
 ## Contributing
 
-Contribution is welcome.
+Contributions are welcome.
 
 Pull Requests will be merged if they match the [Development Guide](#).
 
-For prototypes, pure python implementations using ctypes are also welcome.
+For prototypes, pure Python implementations using ctypes are also welcome.
 We will probably port it to a proper extension in the future.
 
 Please ask questions [here](https://github.com/moderngl/glcontext/issues).
